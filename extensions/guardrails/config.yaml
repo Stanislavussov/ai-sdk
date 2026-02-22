@@ -1,0 +1,7 @@
+# @aliou/pi-guardrails
+
+deny:
+  - "rm -rf"
+  - "DROP DATABASE"
+  - "production database"
+  - "force push main"

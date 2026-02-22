@@ -1,0 +1,26 @@
+{
+  "name": "@standa/ai-sdk",
+  "version": "1.0.0",
+  "type": "module",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ],
+    "extensions": [
+      "./extensions"
+    ],
+    "agents": "./AGENTS.md"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "^0.54.1",
+    "@octokit/auth-oauth-device": "^8.0.3",
+    "@octokit/rest": "^22.0.1",
+    "@sinclair/typebox": "^0.34.48",
+    "dotenv": "^17.3.1",
+    "yaml": "^2.8.2"
+  },
+  "packageManager": "pnpm@10.14.0+sha512.ad27a79641b49c3e481a16a805baa71817a04bbe06a38d17e60e2eaee83f6a146c6a688125f5792e48dd5ba30e7da52a5cda4c3992b9ccf333f9ce223af84748"
+}

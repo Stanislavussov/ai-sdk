@@ -1,0 +1,9 @@
+# @aliou/pi-processes
+
+processes:
+  - name: dev
+    cmd: pnpm dev
+  - name: storybook
+    cmd: pnpm storybook
+  - name: test:watch
+    cmd: pnpm test --watch

@@ -1,0 +1,15 @@
+pm: pnpm
+
+commands:
+  dev:
+    run: $pm dev
+  test:
+    run: $pm test
+  lint:
+    run: $pm lint
+  db:reset:
+    run: $pm prisma migrate reset --force
+    confirm: true
+  deploy:prod:
+    run: vercel --prod
+    confirm: true

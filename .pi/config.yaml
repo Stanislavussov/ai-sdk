@@ -1,0 +1,6 @@
+models:
+  default: anthropic/claude-sonnet
+  alternatives:
+    - openai/codex
+    - google/gemini
+    - ollama/llama3

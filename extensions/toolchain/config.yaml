@@ -1,0 +1,6 @@
+# @aliou/pi-toolchain
+
+replacements:
+  "npm install": "pnpm add"
+  "eslint": "biome"
+  "prettier": "biome format"

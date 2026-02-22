@@ -1,0 +1,6 @@
+extension: rag-context
+
+context:
+  - docs/components.md
+  - docs/api.md
+  - docs/design-system.md
