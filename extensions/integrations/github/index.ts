@@ -563,7 +563,7 @@ export function setupGithubIntegration(
   });
 
   pi.registerCommand("github-issues", {
-    description: "List GitHub issues (usage: /github-issues [open|closed|all])",
+    description: "Browse and select a GitHub issue to add to context",
     handler: async (args, ctx) => {
       const octokit = await getOctokit(ctx.cwd);
       if (!octokit) {
@@ -583,7 +583,11 @@ export function setupGithubIntegration(
         return;
       }
 
-      const state = (args.trim() || "open") as "open" | "closed" | "all";
+      const validStates = ["open", "closed", "all"] as const;
+      const rawState = args.trim().toLowerCase();
+      const state = validStates.includes(rawState as any)
+        ? (rawState as "open" | "closed" | "all")
+        : "open";
       const { data: issues } = await octokit.rest.issues.listForRepo({
         owner: repoInfo.owner,
         repo: repoInfo.repo,
@@ -598,18 +602,65 @@ export function setupGithubIntegration(
         return;
       }
 
-      // Send as a message so the AI and user can both see the issues
-      const lines = realIssues.map((issue) => {
+      // Show a selector so the user can pick an issue
+      const options = realIssues.map((issue) => {
         const labels = issue.labels
           .map((l) => (typeof l === "string" ? l : l.name))
           .filter(Boolean)
           .join(", ");
-        return `#${issue.number} [${issue.state}] ${issue.title}${labels ? ` [${labels}]` : ""}`;
+        return `#${issue.number} — ${issue.title}${labels ? ` [${labels}]` : ""}`;
       });
 
-      pi.sendUserMessage(
-        `Here are the ${state} GitHub issues:\n\n${lines.join("\n")}`,
+      const selected = await ctx.ui.select("Select a GitHub issue", options);
+      if (!selected) {
+        ctx.ui.notify("No issue selected.", "info");
+        return;
+      }
+
+      // Find which issue was selected
+      const selectedIndex = options.indexOf(selected);
+      const selectedIssue = realIssues[selectedIndex];
+
+      // Fetch full issue details + comments
+      const { data: fullIssue } = await octokit.rest.issues.get({
+        owner: repoInfo.owner,
+        repo: repoInfo.repo,
+        issue_number: selectedIssue.number,
+      });
+
+      const { data: comments } = await octokit.rest.issues.listComments({
+        owner: repoInfo.owner,
+        repo: repoInfo.repo,
+        issue_number: selectedIssue.number,
+        per_page: 100,
+      });
+
+      let text = `# GitHub Issue #${fullIssue.number}: ${fullIssue.title}\n`;
+      text += `**State:** ${fullIssue.state}\n`;
+      text += `**Author:** ${fullIssue.user?.login}\n`;
+      text += `**Assignees:** ${fullIssue.assignees?.map((a) => a.login).join(", ") || "none"}\n`;
+      text += `**Labels:** ${fullIssue.labels.map((l) => (typeof l === "string" ? l : l.name)).join(", ") || "none"}\n`;
+      text += `**Created:** ${fullIssue.created_at}\n\n`;
+      text += `## Description\n\n${fullIssue.body || "(no description)"}\n`;
+
+      if (comments.length > 0) {
+        text += `\n## Comments (${comments.length})\n\n`;
+        for (const comment of comments) {
+          text += `---\n**${comment.user?.login}** (${comment.created_at}):\n${comment.body}\n\n`;
+        }
+      }
+
+      // Add to context without triggering an AI turn
+      pi.sendMessage(
+        {
+          customType: "github-issue",
+          content: [{ type: "text", text }],
+          display: true,
+        },
+        { triggerTurn: false },
       );
+
+      ctx.ui.notify(`📌 Issue #${fullIssue.number} added to context.`, "info");
     },
   });
 
