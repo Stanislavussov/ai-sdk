@@ -2,21 +2,26 @@ import { Octokit } from "@octokit/rest";
 import { createOAuthDeviceAuth } from "@octokit/auth-oauth-device";
 import * as fs from "fs/promises";
 import * as path from "path";
-import * as os from "os";
 import "dotenv/config";
 
 // Loaded from .env file — set GITHUB_CLIENT_ID there.
 // Create an OAuth App at: https://github.com/settings/applications/new
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || "";
 
-const TOKEN_PATH = path.join(os.homedir(), ".pi-github-token");
+/**
+ * Get the token file path for a specific project.
+ * Stored at <projectDir>/.pi/github-token so each project has its own auth.
+ */
+function getTokenPath(cwd: string): string {
+  return path.join(cwd, ".pi", "github-token");
+}
 
 /**
- * Load a previously saved GitHub token from disk.
+ * Load a previously saved GitHub token for this project.
  */
-export async function loadToken(): Promise<string | null> {
+export async function loadToken(cwd: string): Promise<string | null> {
   try {
-    const token = await fs.readFile(TOKEN_PATH, { encoding: "utf-8" });
+    const token = await fs.readFile(getTokenPath(cwd), { encoding: "utf-8" });
     return token.trim() || null;
   } catch {
     return null;
@@ -24,28 +29,31 @@ export async function loadToken(): Promise<string | null> {
 }
 
 /**
- * Save a GitHub token to disk.
+ * Save a GitHub token for this project.
  */
-export async function saveToken(token: string): Promise<void> {
-  await fs.writeFile(TOKEN_PATH, token, { encoding: "utf-8", mode: 0o600 });
+export async function saveToken(cwd: string, token: string): Promise<void> {
+  const tokenPath = getTokenPath(cwd);
+  // Ensure .pi directory exists
+  await fs.mkdir(path.dirname(tokenPath), { recursive: true });
+  await fs.writeFile(tokenPath, token, { encoding: "utf-8", mode: 0o600 });
 }
 
 /**
- * Delete the stored token (logout).
+ * Delete the stored token for this project (logout).
  */
-export async function deleteToken(): Promise<void> {
+export async function deleteToken(cwd: string): Promise<void> {
   try {
-    await fs.unlink(TOKEN_PATH);
+    await fs.unlink(getTokenPath(cwd));
   } catch {
     // Ignore if file doesn't exist
   }
 }
 
 /**
- * Create an authenticated Octokit client, or null if not logged in.
+ * Create an authenticated Octokit client for this project, or null if not logged in.
  */
-export async function getOctokit(): Promise<Octokit | null> {
-  const token = await loadToken();
+export async function getOctokit(cwd: string): Promise<Octokit | null> {
+  const token = await loadToken(cwd);
   if (!token) return null;
 
   const octokit = new Octokit({ auth: token });
@@ -56,17 +64,16 @@ export async function getOctokit(): Promise<Octokit | null> {
     return octokit;
   } catch {
     // Token is invalid/expired
-    await deleteToken();
+    await deleteToken(cwd);
     return null;
   }
 }
 
 /**
  * Start the OAuth device flow login.
- * Returns an object with the verification URL and user code,
- * and a promise that resolves to the token once the user completes auth.
  */
 export async function startDeviceFlowLogin(
+  cwd: string,
   onVerification: (verification: {
     verification_uri: string;
     user_code: string;
@@ -87,19 +94,22 @@ export async function startDeviceFlowLogin(
   const tokenAuth = await auth({ type: "oauth" });
   const token = tokenAuth.token;
 
-  await saveToken(token);
+  await saveToken(cwd, token);
   return token;
 }
 
 /**
  * Login using a personal access token (simpler alternative to device flow).
  */
-export async function loginWithToken(token: string): Promise<boolean> {
+export async function loginWithToken(
+  cwd: string,
+  token: string,
+): Promise<boolean> {
   const octokit = new Octokit({ auth: token });
 
   try {
     await octokit.rest.users.getAuthenticated();
-    await saveToken(token);
+    await saveToken(cwd, token);
     return true;
   } catch {
     return false;

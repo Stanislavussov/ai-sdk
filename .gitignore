@@ -35,6 +35,9 @@ out
 .env.test.local
 .env.production.local
 
+# GitHub auth token (per-project)
+.pi/github-token
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

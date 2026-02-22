@@ -28,8 +28,8 @@ To create a Personal Access Token:
  * Helper: ensures the user is authenticated before running a GitHub operation.
  * Returns Octokit instance or throws with a helpful login message.
  */
-async function requireAuth() {
-  const octokit = await getOctokit();
+async function requireAuth(cwd: string) {
+  const octokit = await getOctokit(cwd);
   if (!octokit) {
     throw new Error(NOT_AUTHED_MSG);
   }
@@ -63,8 +63,8 @@ export function setupGithubIntegration(
     description:
       "Checks whether the user is authenticated with GitHub. Run this before other GitHub tools.",
     parameters: Type.Object({}),
-    execute: async () => {
-      const octokit = await getOctokit();
+    execute: async (toolCallId, params, signal, onUpdate, toolCtx) => {
+      const octokit = await getOctokit(toolCtx.cwd);
 
       if (octokit) {
         const { data: user } = await octokit.rest.users.getAuthenticated();
@@ -97,8 +97,8 @@ export function setupGithubIntegration(
           "GitHub Personal Access Token (starts with ghp_ or github_pat_)",
       }),
     }),
-    execute: async (toolCallId, params) => {
-      const success = await loginWithToken(params.token);
+    execute: async (toolCallId, params, signal, onUpdate, toolCtx) => {
+      const success = await loginWithToken(toolCtx.cwd, params.token);
 
       if (success) {
         const { Octokit } = await import("@octokit/rest");
@@ -134,16 +134,19 @@ export function setupGithubIntegration(
     description:
       "Authenticates with GitHub using the OAuth device flow. Opens a browser-based authorization flow. Requires a configured OAuth App Client ID.",
     parameters: Type.Object({}),
-    execute: async () => {
+    execute: async (toolCallId, params, signal, onUpdate, toolCtx) => {
       let verificationInfo: {
         verification_uri: string;
         user_code: string;
       } | null = null;
 
       try {
-        const token = await startDeviceFlowLogin((verification) => {
-          verificationInfo = verification;
-        });
+        const token = await startDeviceFlowLogin(
+          toolCtx.cwd,
+          (verification) => {
+            verificationInfo = verification;
+          },
+        );
 
         const info = verificationInfo as {
           verification_uri: string;
@@ -180,8 +183,8 @@ export function setupGithubIntegration(
     label: "GitHub Logout",
     description: "Removes the stored GitHub authentication token.",
     parameters: Type.Object({}),
-    execute: async () => {
-      await deleteToken();
+    execute: async (toolCallId, params, signal, onUpdate, toolCtx) => {
+      await deleteToken(toolCtx.cwd);
       return {
         content: [
           {
@@ -227,7 +230,7 @@ export function setupGithubIntegration(
       ),
     }),
     execute: async (toolCallId, params, signal, onUpdate, toolCtx) => {
-      const octokit = await requireAuth();
+      const octokit = await requireAuth(toolCtx.cwd);
       const { owner, repo } = await requireRepo(toolCtx.cwd, pi.exec);
 
       const { data: issues } = await octokit.rest.issues.listForRepo({
@@ -274,7 +277,7 @@ export function setupGithubIntegration(
       issueNumber: Type.Number({ description: "The issue number to fetch" }),
     }),
     execute: async (toolCallId, params, signal, onUpdate, toolCtx) => {
-      const octokit = await requireAuth();
+      const octokit = await requireAuth(toolCtx.cwd);
       const { owner, repo } = await requireRepo(toolCtx.cwd, pi.exec);
 
       const { data: issue } = await octokit.rest.issues.get({
@@ -336,7 +339,7 @@ export function setupGithubIntegration(
       ),
     }),
     execute: async (toolCallId, params, signal, onUpdate, toolCtx) => {
-      const octokit = await requireAuth();
+      const octokit = await requireAuth(toolCtx.cwd);
       const { owner, repo } = await requireRepo(toolCtx.cwd, pi.exec);
 
       const { data: issue } = await octokit.rest.issues.create({
@@ -373,7 +376,7 @@ export function setupGithubIntegration(
       }),
     }),
     execute: async (toolCallId, params, signal, onUpdate, toolCtx) => {
-      const octokit = await requireAuth();
+      const octokit = await requireAuth(toolCtx.cwd);
       const { owner, repo } = await requireRepo(toolCtx.cwd, pi.exec);
 
       const { data: comment } = await octokit.rest.issues.createComment({
@@ -410,7 +413,7 @@ export function setupGithubIntegration(
       ),
     }),
     execute: async (toolCallId, params, signal, onUpdate, toolCtx) => {
-      const octokit = await requireAuth();
+      const octokit = await requireAuth(toolCtx.cwd);
       const { owner, repo } = await requireRepo(toolCtx.cwd, pi.exec);
 
       await octokit.rest.issues.update({
@@ -458,7 +461,7 @@ export function setupGithubIntegration(
       ),
     }),
     execute: async (toolCallId, params, signal, onUpdate, toolCtx) => {
-      const octokit = await requireAuth();
+      const octokit = await requireAuth(toolCtx.cwd);
       const { owner, repo } = await requireRepo(toolCtx.cwd, pi.exec);
 
       const { data: prs } = await octokit.rest.pulls.list({
@@ -492,7 +495,7 @@ export function setupGithubIntegration(
   pi.registerCommand("github-status", {
     description: "Check GitHub authentication status",
     handler: async (args, ctx) => {
-      const octokit = await getOctokit();
+      const octokit = await getOctokit(ctx.cwd);
       if (octokit) {
         const { data: user } = await octokit.rest.users.getAuthenticated();
         ctx.ui.notify(
@@ -523,7 +526,7 @@ export function setupGithubIntegration(
           ctx.ui.notify("Login cancelled.", "info");
           return;
         }
-        const success = await loginWithToken(inputToken);
+        const success = await loginWithToken(ctx.cwd, inputToken);
         if (success) {
           const { Octokit } = await import("@octokit/rest");
           const oc = new Octokit({ auth: inputToken });
@@ -539,7 +542,7 @@ export function setupGithubIntegration(
       }
 
       // Token was passed as argument
-      const success = await loginWithToken(token);
+      const success = await loginWithToken(ctx.cwd, token);
       if (success) {
         const { Octokit } = await import("@octokit/rest");
         const oc = new Octokit({ auth: token });
@@ -554,7 +557,7 @@ export function setupGithubIntegration(
   pi.registerCommand("github-logout", {
     description: "Log out from GitHub",
     handler: async (args, ctx) => {
-      await deleteToken();
+      await deleteToken(ctx.cwd);
       ctx.ui.notify("✅ Logged out from GitHub.", "info");
     },
   });
@@ -562,7 +565,7 @@ export function setupGithubIntegration(
   pi.registerCommand("github-issues", {
     description: "List GitHub issues (usage: /github-issues [open|closed|all])",
     handler: async (args, ctx) => {
-      const octokit = await getOctokit();
+      const octokit = await getOctokit(ctx.cwd);
       if (!octokit) {
         ctx.ui.notify(
           "❌ Not authenticated. Use /github-login first.",
