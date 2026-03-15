@@ -2,16 +2,21 @@
   "name": "ai-sdk",
   "version": "0.1.0",
   "type": "module",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "pi": {
-    "extensions": ["./dist/extension.js"]
+    "extensions": [
+      "./dist/extension.js"
+    ]
   },
   "scripts": {
     "clean": "rm -rf dist schema.json *.tsbuildinfo",
     "generate:schema": "tsx scripts/generate-schema.ts",
     "build": "npm run clean && npm run generate:schema && tsc",
     "prepare": "npm run generate:schema && tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "peerDependencies": {
     "@mariozechner/pi-agent-core": "*",
@@ -22,6 +27,7 @@
   "devDependencies": {
     "@types/node": "^25.5.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.0"
   }
 }
