@@ -20,6 +20,7 @@ const {
   mockCreateFindTool,
   mockCreateLsTool,
   mockResourceLoader,
+  mockAuthStorageCreate,
 } = vi.hoisted(() => {
   const mockSession = {
     prompt: vi.fn(),
@@ -41,11 +42,12 @@ const {
     mockResourceLoader: {
       reload: vi.fn(async () => {}),
     },
+    mockAuthStorageCreate: vi.fn(() => ({})),
   };
 });
 
 vi.mock("@mariozechner/pi-coding-agent", () => ({
-  AuthStorage: { inMemory: vi.fn(() => ({})) },
+  AuthStorage: { create: mockAuthStorageCreate, inMemory: vi.fn(() => { throw new Error("AuthStorage.inMemory must not be used — use AuthStorage.create() to read credentials from ~/.pi/agent/auth.json"); }) },
   createAgentSession: mockCreateAgentSession,
   createBashTool: mockCreateBashTool,
   createCodingTools: mockCreateCodingTools,
@@ -121,6 +123,7 @@ describe("runAgent", () => {
     mockCreateLsTool.mockClear();
     mockResolveModel.mockClear();
     mockResourceLoader.reload.mockClear();
+    mockAuthStorageCreate.mockClear();
   });
 
   afterEach(() => {
@@ -176,6 +179,16 @@ describe("runAgent", () => {
     const files = fs.readdirSync(tmpDir);
     const manifestFiles = files.filter((f) => f.includes("test-agent-manifest"));
     expect(manifestFiles).toHaveLength(0);
+  });
+
+  // ── Auth storage ──────────────────────────────────────────
+
+  it("uses AuthStorage.create() to read credentials from disk", async () => {
+    mockSessionWritesManifest(validManifest());
+
+    await runAgent(agent(), "task", "ctx", config());
+
+    expect(mockAuthStorageCreate).toHaveBeenCalled();
   });
 
   // ── Tool resolution: type presets ────────────────────────
