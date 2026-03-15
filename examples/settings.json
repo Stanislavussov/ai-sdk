@@ -1,0 +1,46 @@
+{
+  "$schema": "./node_modules/ai-sdk/schema.json",
+  "packages": ["ai-sdk"],
+  "orchestrator": {
+    "model": "anthropic/claude-sonnet-4-5",
+    "thinkingLevel": "high",
+    "agents": [
+      {
+        "name": "schema",
+        "role": "Database schema using Drizzle ORM",
+        "type": "coding",
+        "rules": "Use Drizzle ORM, PostgreSQL dialect. snake_case columns. Every table: id (uuid), created_at, updated_at.",
+        "dependsOn": []
+      },
+      {
+        "name": "dal",
+        "role": "Data access layer using TanStack Query",
+        "type": "coding",
+        "rules": "TanStack Query for all data fetching. One hook file per entity. All mutations invalidate parent queries.",
+        "dependsOn": ["schema"]
+      },
+      {
+        "name": "bl",
+        "role": "Business logic via Next.js Server Actions",
+        "type": "coding",
+        "rules": "Server Actions only, no API routes. Zod validation on every input.",
+        "dependsOn": ["schema"]
+      },
+      {
+        "name": "ui",
+        "role": "React UI components",
+        "type": "coding",
+        "model": "anthropic/claude-opus-4-5",
+        "rules": "shadcn/ui components only. cn() for className merging. No inline styles.",
+        "dependsOn": ["dal", "bl"]
+      },
+      {
+        "name": "reviewer",
+        "role": "Code reviewer",
+        "type": "readonly",
+        "rules": "Review all generated code for correctness, consistency, and best practices.",
+        "dependsOn": ["ui"]
+      }
+    ]
+  }
+}

@@ -3,6 +3,7 @@ import path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { createOrchestrator } from "./arch-agents/index.js";
+import { runAgent } from "./arch-agents/agent-factory.js";
 import type { AgentDefinition, AgentManifest, AgentType, OrchestratorConfig, ProgressEvent } from "./arch-agents/types.js";
 
 // ── Config schema ──────────────────────────────────────────
@@ -218,6 +219,136 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  // ── Tool: run_agent ──
+
+  pi.registerTool({
+    name: "run_agent",
+    label: "Run Agent",
+    description:
+      "Run a single agent by name from the project's orchestrator config, " +
+      "or define one inline. Runs only that agent — no dependency chain. " +
+      "Use this when the user wants to target a specific layer or specialist.",
+    promptSnippet:
+      "Run a single named agent from .pi/settings.json orchestrator config",
+    promptGuidelines: [
+      "Use run_agent when the user wants to run a specific agent by name, e.g. " +
+        '"run the schema agent to add a posts table" or "have the reviewer check my code".',
+      "If the agent is defined in .pi/settings.json, just provide name + task.",
+      "You can override the agent inline by providing role/rules/model/type/etc.",
+      "This does NOT run dependencies — use orchestrate for the full pipeline.",
+    ],
+    parameters: Type.Object({
+      name: Type.String({
+        description:
+          "Agent name — must match a configured agent in .pi/settings.json, " +
+          "or provide role+rules to define one inline.",
+      }),
+      task: Type.String({
+        description: "The task for this agent to perform",
+      }),
+      context: Type.Optional(
+        Type.String({
+          description:
+            "Optional context to inject as upstream dependency context. " +
+            "Useful when you want to provide information from previous work.",
+        }),
+      ),
+      model: Type.Optional(
+        Type.String({
+          description: 'Override model for this run ("provider/model-id")',
+        }),
+      ),
+      // Inline agent overrides — used when name doesn't match config or to override fields
+      role: Type.Optional(
+        Type.String({ description: "Agent role (required if not in config)" }),
+      ),
+      rules: Type.Optional(
+        Type.String({ description: "Agent rules (required if not in config)" }),
+      ),
+      type: Type.Optional(
+        Type.String({
+          description: 'Agent type: "coding", "readonly", "all", "none"',
+        }),
+      ),
+      enabledTools: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "Cherry-pick tools: read, bash, edit, write, grep, find, ls",
+        }),
+      ),
+      skills: Type.Optional(
+        Type.Array(Type.String(), { description: "Skill directory paths" }),
+      ),
+    }),
+
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
+      // Resolve agent definition: config lookup + inline overrides
+      const configAgent = projectConfig?.agents.find(
+        (a) => a.name === params.name,
+      );
+
+      if (!configAgent && !params.role) {
+        const available = projectConfig?.agents.map((a) => a.name).join(", ") ?? "(none)";
+        throw new Error(
+          `Agent "${params.name}" not found in config. Available: ${available}. ` +
+          "Provide role + rules to define one inline.",
+        );
+      }
+
+      const agentDef: AgentDefinition = {
+        name: params.name,
+        role: params.role ?? configAgent?.role ?? "",
+        rules: params.rules ?? configAgent?.rules ?? "",
+        dependsOn: [],
+        model: (params.model ?? configAgent?.model) as any,
+        type: (params.type ?? configAgent?.type) as AgentType | undefined,
+        enabledTools: params.enabledTools ?? configAgent?.enabledTools,
+        skills: params.skills ?? configAgent?.skills,
+        thinkingLevel: configAgent?.thinkingLevel,
+      };
+
+      const dependencyContext =
+        params.context ?? "You are running standalone — no upstream context.";
+
+      onUpdate?.({
+        content: [
+          {
+            type: "text",
+            text: `▶ Running agent "${agentDef.name}" (${agentDef.model ?? projectConfig?.model ?? "default"})...`,
+          },
+        ],
+        details: {},
+      });
+
+      const manifest = await runAgent(agentDef, params.task, dependencyContext, {
+        agents: [agentDef],
+        model: projectConfig?.model,
+        thinkingLevel: projectConfig?.thinkingLevel,
+        cwd: ctx.cwd,
+        manifestDir: projectConfig?.manifestDir,
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: [
+              `✓ Agent "${manifest.agent}" complete.`,
+              "",
+              `Summary: ${manifest.summary}`,
+              `Files: ${manifest.changedFiles.join(", ") || "(none)"}`,
+              Object.keys(manifest.exports).length > 0
+                ? `Exports:\n${Object.entries(manifest.exports)
+                    .map(([sym, loc]) => `  ${sym} → ${loc}`)
+                    .join("\n")}`
+                : "Exports: (none)",
+            ].join("\n"),
+          },
+        ],
+        details: { manifest },
+      };
+    },
+  });
+
   // ── Command: /orchestrate <task> ──
 
   pi.registerCommand("orchestrate", {
@@ -241,6 +372,87 @@ export default function (pi: ExtensionAPI) {
       pi.sendUserMessage(
         `Run the orchestrate tool with this task: ${task}`,
         { deliverAs: "followUp" },
+      );
+    },
+  });
+
+  // ── Command: /agent <name> <task> ──
+
+  pi.registerCommand("agent", {
+    description:
+      "Run a single agent by name with a task. Usage: /agent <name> <task>",
+    handler: async (args, ctx) => {
+      if (!projectConfig) {
+        ctx.ui.notify(
+          "No orchestrator config in .pi/settings.json. Add an \"orchestrator\" key — see ai-sdk README.",
+          "error",
+        );
+        return;
+      }
+
+      const trimmed = args?.trim() ?? "";
+      const spaceIdx = trimmed.indexOf(" ");
+      if (!trimmed || spaceIdx === -1) {
+        const names = projectConfig.agents.map((a) => a.name).join(", ");
+        ctx.ui.notify(
+          `Usage: /agent <name> <task>\nAvailable: ${names}`,
+          "warning",
+        );
+        return;
+      }
+
+      const name = trimmed.slice(0, spaceIdx);
+      const task = trimmed.slice(spaceIdx + 1).trim();
+
+      const agent = projectConfig.agents.find((a) => a.name === name);
+      if (!agent) {
+        const names = projectConfig.agents.map((a) => a.name).join(", ");
+        ctx.ui.notify(
+          `Agent "${name}" not found. Available: ${names}`,
+          "error",
+        );
+        return;
+      }
+
+      pi.sendUserMessage(
+        `Run the run_agent tool with name="${name}" and this task: ${task}`,
+        { deliverAs: "followUp" },
+      );
+    },
+  });
+
+  // ── Command: /orch-agents ──
+
+  pi.registerCommand("orch-agents", {
+    description: "List all configured orchestrator agents from .pi/settings.json",
+    handler: async (_args, ctx) => {
+      if (!projectConfig) {
+        ctx.ui.notify(
+          "No orchestrator config in .pi/settings.json. Add an \"orchestrator\" key — see ai-sdk README.",
+          "error",
+        );
+        return;
+      }
+
+      const lines = projectConfig.agents.map((a) => {
+        const deps = a.dependsOn?.length
+          ? `depends on: ${a.dependsOn.join(", ")}`
+          : "no dependencies";
+        const model = a.model ?? projectConfig!.model ?? "default";
+        const type = a.type ?? "coding";
+        return `  • ${a.name} (${type}, ${model}) — ${a.role} [${deps}]`;
+      });
+
+      ctx.ui.notify(
+        [
+          `Configured agents (${projectConfig.agents.length}):`,
+          ...lines,
+          "",
+          "Run one:  /agent <name> <task>",
+          "Run all:  /orchestrate <task>",
+          "List:     /orch-agents",
+        ].join("\n"),
+        "info",
       );
     },
   });

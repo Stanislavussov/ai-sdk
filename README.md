@@ -2,14 +2,22 @@
 
 Multi-agent orchestration for [pi](https://github.com/badlogic/pi-mono). Define specialized agents with dependency graphs — the orchestrator resolves execution order and runs independent agents in parallel waves.
 
+## Installation
+
+In your consumer project:
+
+```bash
+npm install ai-sdk
+```
+
 ## Quick Start
 
-Create `.pi/settings.json` in your project — one file, everything in one place:
+Create `.pi/settings.json` in your project — one file, everything in one place (see [`examples/settings.json`](examples/settings.json) for a copy-paste starting point):
 
 ```json
 {
-  "$schema": "/path/to/ai-sdk/schema.json",
-  "packages": ["/path/to/ai-sdk"],
+  "$schema": "./node_modules/ai-sdk/schema.json",
+  "packages": ["ai-sdk"],
   "orchestrator": {
     "model": "anthropic/claude-sonnet-4-5",
     "thinkingLevel": "high",
@@ -65,6 +73,8 @@ The `$schema` field gives you autocomplete and validation in VS Code — model n
 
 Open pi in your project. The extension auto-loads and you can:
 
+#### Run the full pipeline
+
 - **Ask the LLM:** _"Run the orchestrator to add user authentication"_ → calls the `orchestrate` tool
 - **Command:** `/orchestrate Add a users table with email/password auth`
 
@@ -88,6 +98,45 @@ Open pi in your project. The extension auto-loads and you can:
   ✓ reviewer: All layers consistent, no issues found
 
 ✓ Orchestration complete — 5 agents finished
+```
+
+#### Run a single agent
+
+Target one specific agent without running the full pipeline:
+
+- **Ask the LLM:** _"Run the schema agent to add a posts table"_ → calls the `run_agent` tool
+- **Command:** `/agent schema Add a posts table with title and body`
+
+```
+▶ Running agent "schema" (anthropic/claude-sonnet-4-5)...
+✓ Agent "schema" complete.
+
+Summary: Created posts table with title, body, author_id columns
+Files: src/db/schema.ts
+Exports:
+  postsTable → src/db/schema.ts
+  PostInsert → src/db/schema.ts
+```
+
+The LLM can also define agents inline — no config needed:
+
+> _"Run an agent named 'auditor' with role 'security auditor' and rules 'check for SQL injection and XSS' to review the auth module"_
+
+#### List configured agents
+
+- **Command:** `/orch-agents`
+
+```
+Configured agents (5):
+  • schema (coding, anthropic/claude-sonnet-4-5) — Database schema using Drizzle ORM [no dependencies]
+  • dal (coding, anthropic/claude-sonnet-4-5) — Data access layer using TanStack Query [depends on: schema]
+  • bl (coding, anthropic/claude-sonnet-4-5) — Business logic via Next.js Server Actions [depends on: schema]
+  • ui (coding, anthropic/claude-opus-4-5) — React UI components [depends on: dal, bl]
+  • reviewer (readonly, anthropic/claude-sonnet-4-5) — Code reviewer [depends on: ui]
+
+Run one:  /agent <name> <task>
+Run all:  /orchestrate <task>
+List:     /orch-agents
 ```
 
 ## Config Reference

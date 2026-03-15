@@ -7,9 +7,10 @@
     "extensions": ["./dist/extension.js"]
   },
   "scripts": {
+    "clean": "rm -rf dist schema.json *.tsbuildinfo",
     "generate:schema": "tsx scripts/generate-schema.ts",
-    "build": "tsx scripts/generate-schema.ts && tsc",
-    "prepare": "tsx scripts/generate-schema.ts && tsc",
+    "build": "npm run clean && npm run generate:schema && tsc",
+    "prepare": "npm run generate:schema && tsc",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
