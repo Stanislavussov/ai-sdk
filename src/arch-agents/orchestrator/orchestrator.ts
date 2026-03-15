@@ -1,7 +1,7 @@
-import { runAgent } from "./agent-factory.js";
-import { buildDependencyGraph } from "./graph.js";
-import { ManifestBus } from "./manifest-bus.js";
-import type { AgentManifest, OrchestratorConfig } from "./types.js";
+import { runAgent } from "../agent/agent-factory.js";
+import { buildDependencyGraph } from "../graph/graph.js";
+import { ManifestBus } from "../manifest/manifest-bus.js";
+import type { AgentManifest, OrchestratorConfig } from "../types.js";
 
 export class Orchestrator {
   constructor(private config: OrchestratorConfig) {}

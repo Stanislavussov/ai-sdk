@@ -19,10 +19,10 @@ import {
   type Skill,
 } from "@mariozechner/pi-coding-agent";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
-import { resolveModel } from "./model-resolver.js";
-import { buildAgentSystemPrompt, buildOrchestratorTaskPrompt } from "./prompts.js";
-import { AGENT_TYPES, TOOL_NAMES } from "./constants.js";
-import type { AgentDefinition, AgentManifest, AgentType, OrchestratorConfig } from "./types.js";
+import { resolveModel } from "../model/model-resolver.js";
+import { buildAgentSystemPrompt, buildOrchestratorTaskPrompt } from "../prompts/prompts.js";
+import { AGENT_TYPES, TOOL_NAMES } from "../constants.js";
+import type { AgentDefinition, AgentManifest, AgentType, OrchestratorConfig } from "../types.js";
 
 // ── Tool resolution ────────────────────────────────────────
 
@@ -150,7 +150,7 @@ export async function runAgent(
     `${def.name}-manifest-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
   );
 
-  const authStorage = AuthStorage.inMemory();
+  const authStorage = AuthStorage.create();
   const modelRegistry = new ModelRegistry(authStorage);
   const model = resolveModel(def.model ?? config.model, modelRegistry);
 

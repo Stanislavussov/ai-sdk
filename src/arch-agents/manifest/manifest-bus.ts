@@ -1,4 +1,4 @@
-import type { AgentManifest } from "./types.js";
+import type { AgentManifest } from "../types.js";
 
 export class ManifestBus {
   private store = new Map<string, AgentManifest>();

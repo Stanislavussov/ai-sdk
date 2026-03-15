@@ -1,5 +1,5 @@
 import { Orchestrator } from "./orchestrator.js";
-import type { AgentManifest, OrchestratorConfig } from "./types.js";
+import type { AgentManifest, OrchestratorConfig } from "../types.js";
 
 export function createOrchestrator(
   config: OrchestratorConfig,

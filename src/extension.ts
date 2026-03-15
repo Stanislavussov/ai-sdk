@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { createOrchestrator } from "./arch-agents/index.js";
-import { runAgent } from "./arch-agents/agent-factory.js";
+import { runAgent } from "./arch-agents/agent/agent-factory.js";
 import type { AgentDefinition, AgentManifest, AgentType, OrchestratorConfig, ProgressEvent } from "./arch-agents/types.js";
 
 // ── Config schema ──────────────────────────────────────────

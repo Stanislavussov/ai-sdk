@@ -28,7 +28,7 @@ vi.mock("./arch-agents/index.js", () => ({
 }));
 
 // ── Mock arch-agents/agent-factory.js ──────────────────────
-vi.mock("./arch-agents/agent-factory.js", () => ({
+vi.mock("./arch-agents/agent/agent-factory.js", () => ({
   runAgent: mockRunAgent,
 }));
 

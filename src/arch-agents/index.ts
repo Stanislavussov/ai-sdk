@@ -1,4 +1,4 @@
-export { createOrchestrator } from "./orchestrator-factory.js";
+export { createOrchestrator } from "./orchestrator/orchestrator-factory.js";
 export {
   AGENT_TYPES,
   KNOWN_MODELS,

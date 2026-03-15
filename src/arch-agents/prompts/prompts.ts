@@ -1,4 +1,4 @@
-import type { AgentDefinition } from "./types.js";
+import type { AgentDefinition } from "../types.js";
 
 export function buildAgentSystemPrompt(
   def: AgentDefinition,

@@ -1,4 +1,4 @@
-import type { AgentDefinition } from "./types.js";
+import type { AgentDefinition } from "../types.js";
 
 export interface DependencyGraph {
   waves: AgentDefinition[][];
