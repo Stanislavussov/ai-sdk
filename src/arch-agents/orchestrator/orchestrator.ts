@@ -23,7 +23,7 @@ export class Orchestrator {
 
       const results = await Promise.allSettled(
         wave.map(async (def) => {
-          const modelId = def.model ?? this.config.model ?? "default";
+          const modelId = def.model ?? this.config.model;
           this.config.onProgress?.({ type: "agent_start", agent: def.name, model: modelId });
 
           try {

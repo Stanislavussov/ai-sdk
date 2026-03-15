@@ -41,7 +41,12 @@ export interface AgentManifest {
 export interface OrchestratorConfig {
   agents: AgentDefinition[];
   cwd?: string;
-  model?: ModelId;
+  /**
+   * Default model for all agents.
+   * Individual agents can override with their own `model` field.
+   * Format: "provider/model-id" (e.g. "anthropic/claude-sonnet-4-5").
+   */
+  model: ModelId;
   thinkingLevel?: ThinkingLevel;
   onProgress?: (event: ProgressEvent) => void;
   manifestDir?: string;

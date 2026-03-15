@@ -17,7 +17,7 @@ import { createOrchestrator } from "./orchestrator-factory.js";
 
 describe("createOrchestrator", () => {
   it("returns an object with a run method", () => {
-    const result = createOrchestrator({ agents: [] });
+    const result = createOrchestrator({ agents: [], model: "anthropic/claude-sonnet-4-5" });
     expect(typeof result.run).toBe("function");
   });
 

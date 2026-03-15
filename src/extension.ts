@@ -10,7 +10,7 @@ import type { AgentDefinition, AgentManifest, AgentType, OrchestratorConfig, Pro
 // Loaded from .pi/settings.json → "orchestrator" key
 
 interface OrchestratorFileConfig {
-  model?: string;
+  model: string;
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
   manifestDir?: string;
   agents: AgentDefinitionConfig[];
@@ -38,10 +38,20 @@ function loadConfig(cwd: string): OrchestratorFileConfig | null {
     try {
       const raw = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
       if (raw.orchestrator && Array.isArray(raw.orchestrator.agents)) {
+        if (!raw.orchestrator.model || typeof raw.orchestrator.model !== "string") {
+          throw new Error(
+            'orchestrator.model is required in .pi/settings.json. ' +
+            'Specify a default model, e.g. "anthropic/claude-sonnet-4-5".',
+          );
+        }
         return raw.orchestrator as OrchestratorFileConfig;
       }
-    } catch {
-      // ignore parse errors
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        // ignore JSON parse errors
+      } else {
+        throw err;
+      }
     }
   }
   return null;
@@ -137,7 +147,7 @@ export default function (pi: ExtensionAPI) {
       model: Type.Optional(
         Type.String({
           description:
-            'Override default model ("provider/model-id"). Falls back to config, then to pi default.',
+            'Override default model ("provider/model-id"). Falls back to config model.',
         }),
       ),
       agents: Type.Optional(
@@ -194,11 +204,19 @@ export default function (pi: ExtensionAPI) {
         );
       }
 
+      const model = params.model ?? projectConfig?.model;
+      if (!model) {
+        throw new Error(
+          "No model specified. Set \"model\" in the orchestrator config in .pi/settings.json " +
+          "or pass it as a parameter. Example: \"anthropic/claude-sonnet-4-5\".",
+        );
+      }
+
       const { onProgress, lines } = buildProgressHandler(onUpdate);
 
       const config: OrchestratorConfig = {
         agents,
-        model: params.model ?? projectConfig?.model,
+        model,
         thinkingLevel: projectConfig?.thinkingLevel,
         cwd: ctx.cwd,
         manifestDir: projectConfig?.manifestDir,
@@ -317,11 +335,19 @@ export default function (pi: ExtensionAPI) {
       const dependencyContext =
         params.context ?? "You are running standalone — no upstream context.";
 
+      const model = params.model ?? configAgent?.model ?? projectConfig?.model;
+      if (!model) {
+        throw new Error(
+          "No model specified. Set \"model\" in the orchestrator config in .pi/settings.json, " +
+          "on the agent definition, or pass it as a parameter. Example: \"anthropic/claude-sonnet-4-5\".",
+        );
+      }
+
       onUpdate?.({
         content: [
           {
             type: "text",
-            text: `▶ Running agent "${agentDef.name}" (${agentDef.model ?? projectConfig?.model ?? "default"})...`,
+            text: `▶ Running agent "${agentDef.name}" (${agentDef.model ?? model})...`,
           },
         ],
         details: {},
@@ -329,7 +355,7 @@ export default function (pi: ExtensionAPI) {
 
       const manifest = await runAgent(agentDef, params.task, dependencyContext, {
         agents: [agentDef],
-        model: projectConfig?.model,
+        model,
         thinkingLevel: projectConfig?.thinkingLevel,
         cwd: ctx.cwd,
         manifestDir: projectConfig?.manifestDir,

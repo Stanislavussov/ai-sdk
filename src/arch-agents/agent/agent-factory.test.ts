@@ -101,6 +101,7 @@ let tmpDir: string;
 function config(overrides?: Record<string, any>) {
   return {
     agents: [],
+    model: "anthropic/claude-sonnet-4-5",
     manifestDir: tmpDir,
     ...overrides,
   };

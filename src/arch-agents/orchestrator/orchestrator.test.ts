@@ -30,6 +30,8 @@ function manifest(agentName: string): AgentManifest {
   };
 }
 
+const TEST_MODEL = "anthropic/claude-sonnet-4-5";
+
 describe("Orchestrator", () => {
   beforeEach(() => {
     mockRunAgent.mockReset();
@@ -41,7 +43,7 @@ describe("Orchestrator", () => {
     const m = manifest("a");
     mockRunAgent.mockResolvedValue(m);
 
-    const orch = new Orchestrator({ agents: [agent("a")] });
+    const orch = new Orchestrator({ agents: [agent("a")], model: TEST_MODEL });
     const result = await orch.run("Build stuff");
 
     expect(result).toEqual([m]);
@@ -63,6 +65,7 @@ describe("Orchestrator", () => {
 
     const orch = new Orchestrator({
       agents: [agent("a"), agent("b"), agent("c")],
+      model: TEST_MODEL,
     });
     const result = await orch.run("Task");
 
@@ -80,6 +83,7 @@ describe("Orchestrator", () => {
 
     const orch = new Orchestrator({
       agents: [agent("a"), agent("b", ["a"])],
+      model: TEST_MODEL,
     });
     await orch.run("Task");
 
@@ -94,6 +98,7 @@ describe("Orchestrator", () => {
 
     const orch = new Orchestrator({
       agents: [agent("a"), agent("b", ["a"])],
+      model: TEST_MODEL,
     });
     await orch.run("Task");
 
@@ -107,7 +112,7 @@ describe("Orchestrator", () => {
   it("passes no-upstream context to root agents", async () => {
     mockRunAgent.mockResolvedValue(manifest("a"));
 
-    const orch = new Orchestrator({ agents: [agent("a")] });
+    const orch = new Orchestrator({ agents: [agent("a")], model: TEST_MODEL });
     await orch.run("Task");
 
     const contextArg = mockRunAgent.mock.calls[0][2] as string;
@@ -144,6 +149,7 @@ describe("Orchestrator", () => {
     const events: ProgressEvent[] = [];
     const orch = new Orchestrator({
       agents: [agent("a"), agent("b", ["a"])],
+      model: TEST_MODEL,
       onProgress: (e) => events.push(e),
     });
     await orch.run("Task");
@@ -154,7 +160,7 @@ describe("Orchestrator", () => {
     expect(waveStarts[1]).toEqual({ type: "wave_start", wave: 1, agents: ["b"] });
   });
 
-  it("fires agent_start events", async () => {
+  it("fires agent_start with root model when agent has no model override", async () => {
     mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
 
     const events: ProgressEvent[] = [];
@@ -181,6 +187,7 @@ describe("Orchestrator", () => {
     const events: ProgressEvent[] = [];
     const orch = new Orchestrator({
       agents: [agent("a")],
+      model: TEST_MODEL,
       onProgress: (e) => events.push(e),
     });
     await orch.run("Task");
@@ -200,6 +207,7 @@ describe("Orchestrator", () => {
     const events: ProgressEvent[] = [];
     const orch = new Orchestrator({
       agents: [agent("a"), agent("b")],
+      model: TEST_MODEL,
       onProgress: (e) => events.push(e),
     });
     await orch.run("Task");
@@ -207,20 +215,6 @@ describe("Orchestrator", () => {
     const done = events.filter((e) => e.type === "orchestrator_done");
     expect(done).toHaveLength(1);
     expect((done[0] as any).manifests).toHaveLength(2);
-  });
-
-  it("uses 'default' as model in agent_start when no model is set", async () => {
-    mockRunAgent.mockResolvedValue(manifest("a"));
-
-    const events: ProgressEvent[] = [];
-    const orch = new Orchestrator({
-      agents: [agent("a")],
-      onProgress: (e) => events.push(e),
-    });
-    await orch.run("Task");
-
-    const start = events.find((e) => e.type === "agent_start") as any;
-    expect(start.model).toBe("default");
   });
 
   it("uses agent-level model in agent_start when set", async () => {
@@ -244,7 +238,7 @@ describe("Orchestrator", () => {
   it("throws when an agent fails", async () => {
     mockRunAgent.mockRejectedValue(new Error("Agent exploded"));
 
-    const orch = new Orchestrator({ agents: [agent("a")] });
+    const orch = new Orchestrator({ agents: [agent("a")], model: TEST_MODEL });
     await expect(orch.run("Task")).rejects.toThrow("Wave 0: Agent exploded");
   });
 
@@ -255,6 +249,7 @@ describe("Orchestrator", () => {
     const events: ProgressEvent[] = [];
     const orch = new Orchestrator({
       agents: [agent("a")],
+      model: TEST_MODEL,
       onProgress: (e) => events.push(e),
     });
 
@@ -272,6 +267,7 @@ describe("Orchestrator", () => {
     const events: ProgressEvent[] = [];
     const orch = new Orchestrator({
       agents: [agent("a")],
+      model: TEST_MODEL,
       onProgress: (e) => events.push(e),
     });
 
@@ -285,6 +281,7 @@ describe("Orchestrator", () => {
 
     const orch = new Orchestrator({
       agents: [agent("a"), agent("b", ["a"])],
+      model: TEST_MODEL,
     });
 
     await expect(orch.run("Task")).rejects.toThrow();
@@ -305,6 +302,7 @@ describe("Orchestrator", () => {
     const events: ProgressEvent[] = [];
     const orch = new Orchestrator({
       agents: [agent("a"), agent("b")],
+      model: TEST_MODEL,
       onProgress: (e) => events.push(e),
     });
 
@@ -324,6 +322,7 @@ describe("Orchestrator", () => {
         { ...agent("b"), standalone: true },
         agent("c", ["a"]),
       ],
+      model: TEST_MODEL,
     });
     const result = await orch.run("Task");
 
@@ -338,6 +337,7 @@ describe("Orchestrator", () => {
 
     const orch = new Orchestrator({
       agents: [agent("a"), agent("b")],
+      model: TEST_MODEL,
     });
     const result = await orch.run("Task");
 
@@ -350,6 +350,7 @@ describe("Orchestrator", () => {
         { ...agent("a"), standalone: true },
         { ...agent("b"), standalone: true },
       ],
+      model: TEST_MODEL,
     });
     const result = await orch.run("Task");
 
@@ -366,6 +367,7 @@ describe("Orchestrator", () => {
         agent("a"),
         { ...agent("standalone-helper"), standalone: true },
       ],
+      model: TEST_MODEL,
       onProgress: (e) => events.push(e),
     });
     await orch.run("Task");
@@ -380,6 +382,7 @@ describe("Orchestrator", () => {
   it("throws on cyclic dependencies", async () => {
     const orch = new Orchestrator({
       agents: [agent("a", ["b"]), agent("b", ["a"])],
+      model: TEST_MODEL,
     });
     await expect(orch.run("Task")).rejects.toThrow(/Cycle detected/);
   });
@@ -387,6 +390,7 @@ describe("Orchestrator", () => {
   it("throws on unknown dependency", async () => {
     const orch = new Orchestrator({
       agents: [agent("a", ["nonexistent"])],
+      model: TEST_MODEL,
     });
     await expect(orch.run("Task")).rejects.toThrow(/Unknown dependency/);
   });

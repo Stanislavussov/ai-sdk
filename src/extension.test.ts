@@ -247,7 +247,7 @@ describe("extension.ts", () => {
   // ── orchestrate tool ───────────────────────────────────
 
   describe("orchestrate tool", () => {
-    function setupWithConfig(agents: any[], model?: string) {
+    function setupWithConfig(agents: any[], model: string = "anthropic/claude-sonnet-4-5") {
       extensionFn(pi as any);
 
       // Simulate session_start to load config
@@ -321,6 +321,7 @@ describe("extension.ts", () => {
         "call-2",
         {
           task: "Test task",
+          model: "anthropic/claude-sonnet-4-5",
           agents: [{ name: "inline-agent", role: "Tester", rules: "Test all" }],
         },
         new AbortController().signal,
@@ -424,7 +425,7 @@ describe("extension.ts", () => {
   // ── run_agent tool ─────────────────────────────────────
 
   describe("run_agent tool", () => {
-    function setupWithConfig(agents: any[], model?: string) {
+    function setupWithConfig(agents: any[], model: string = "anthropic/claude-sonnet-4-5") {
       extensionFn(pi as any);
 
       const piDir = path.join(tmpDir, ".pi");
@@ -532,6 +533,7 @@ describe("extension.ts", () => {
           role: "Custom agent",
           rules: "Custom rules",
           type: "readonly",
+          model: "anthropic/claude-sonnet-4-5",
         },
         new AbortController().signal,
         vi.fn(),
@@ -711,7 +713,7 @@ describe("extension.ts", () => {
       fs.mkdirSync(piDir, { recursive: true });
       fs.writeFileSync(
         path.join(piDir, "settings.json"),
-        JSON.stringify({ orchestrator: { agents } }),
+        JSON.stringify({ orchestrator: { model: "anthropic/claude-sonnet-4-5", agents } }),
       );
 
       const ctx = { cwd: tmpDir, ui: { notify: vi.fn() } };
@@ -900,6 +902,7 @@ describe("extension.ts", () => {
         path.join(piDir, "settings.json"),
         JSON.stringify({
           orchestrator: {
+            model: "anthropic/claude-sonnet-4-5",
             agents: [
               { name: "a", role: "A", rules: "R" },
               { name: "b", role: "B", rules: "R" },
