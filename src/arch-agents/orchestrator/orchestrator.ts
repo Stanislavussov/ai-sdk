@@ -7,7 +7,8 @@ export class Orchestrator {
   constructor(private config: OrchestratorConfig) {}
 
   async run(task: string): Promise<AgentManifest[]> {
-    const graph = buildDependencyGraph(this.config.agents);
+    const pipelineAgents = this.config.agents.filter((a) => !a.standalone);
+    const graph = buildDependencyGraph(pipelineAgents);
     const bus = new ManifestBus();
     const allManifests: AgentManifest[] = [];
 

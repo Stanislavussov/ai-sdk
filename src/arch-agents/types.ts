@@ -23,6 +23,12 @@ export interface AgentDefinition {
   tools?: AgentTool<any>[];
   skills?: string[];
   thinkingLevel?: ThinkingLevel;
+  /**
+   * When true, the agent is excluded from the default orchestration pipeline.
+   * It can still be run individually via `run_agent` or `/agent <name> <task>`.
+   * @default false
+   */
+  standalone?: boolean;
 }
 
 export interface AgentManifest {

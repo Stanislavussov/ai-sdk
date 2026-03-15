@@ -26,6 +26,7 @@ interface AgentDefinitionConfig {
   enabledTools?: string[];
   skills?: string[];
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+  standalone?: boolean;
 }
 
 // ── Config loading ─────────────────────────────────────────
@@ -165,6 +166,13 @@ export default function (pi: ExtensionAPI) {
             ),
             skills: Type.Optional(
               Type.Array(Type.String(), { description: "Skill directory paths" }),
+            ),
+            standalone: Type.Optional(
+              Type.Boolean({
+                description:
+                  "When true, exclude this agent from the orchestration pipeline. " +
+                  "It can still be run individually via run_agent.",
+              }),
             ),
           }),
           {
@@ -434,7 +442,10 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      const lines = projectConfig.agents.map((a) => {
+      const pipelineAgents = projectConfig.agents.filter((a) => !a.standalone);
+      const standaloneAgents = projectConfig.agents.filter((a) => a.standalone);
+
+      const lines = pipelineAgents.map((a) => {
         const deps = a.dependsOn?.length
           ? `depends on: ${a.dependsOn.join(", ")}`
           : "no dependencies";
@@ -442,6 +453,16 @@ export default function (pi: ExtensionAPI) {
         const type = a.type ?? "coding";
         return `  • ${a.name} (${type}, ${model}) — ${a.role} [${deps}]`;
       });
+
+      if (standaloneAgents.length > 0) {
+        lines.push("");
+        lines.push("Standalone (not in pipeline):");
+        for (const a of standaloneAgents) {
+          const model = a.model ?? projectConfig!.model ?? "default";
+          const type = a.type ?? "coding";
+          lines.push(`  ◦ ${a.name} (${type}, ${model}) — ${a.role}`);
+        }
+      }
 
       ctx.ui.notify(
         [

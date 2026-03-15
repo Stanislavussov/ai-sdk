@@ -128,6 +128,17 @@ describe("buildDependencyGraph", () => {
     expect(result.waves[0][0]).toBe(def);
   });
 
+  it("preserves the standalone field in the output", () => {
+    const def: AgentDefinition = {
+      name: "x",
+      role: "x role",
+      rules: "x rules",
+      standalone: true,
+    };
+    const result = buildDependencyGraph([def]);
+    expect(result.waves[0][0].standalone).toBe(true);
+  });
+
   // ── Error cases ──────────────────────────────────────────
 
   it("throws on duplicate agent names", () => {

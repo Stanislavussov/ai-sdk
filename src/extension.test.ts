@@ -17,6 +17,7 @@ vi.mock("@sinclair/typebox", () => ({
   Type: {
     Object: (schema: any) => schema,
     String: (opts?: any) => ({ type: "string", ...opts }),
+    Boolean: (opts?: any) => ({ type: "boolean", ...opts }),
     Optional: (inner: any) => ({ ...inner, optional: true }),
     Array: (inner: any, opts?: any) => ({ type: "array", items: inner, ...opts }),
   },

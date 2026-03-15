@@ -313,6 +313,68 @@ describe("Orchestrator", () => {
     expect(callCount).toBe(2);
   });
 
+  // ── Standalone agents ─────────────────────────────────────
+
+  it("excludes standalone agents from the pipeline", async () => {
+    mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+    const orch = new Orchestrator({
+      agents: [
+        agent("a"),
+        { ...agent("b"), standalone: true },
+        agent("c", ["a"]),
+      ],
+    });
+    const result = await orch.run("Task");
+
+    expect(result.map((m) => m.agent).sort()).toEqual(["a", "c"]);
+    expect(mockRunAgent).toHaveBeenCalledTimes(2);
+    const calledNames = mockRunAgent.mock.calls.map((c: any[]) => c[0].name);
+    expect(calledNames).not.toContain("b");
+  });
+
+  it("runs all agents when none are standalone", async () => {
+    mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+    const orch = new Orchestrator({
+      agents: [agent("a"), agent("b")],
+    });
+    const result = await orch.run("Task");
+
+    expect(result).toHaveLength(2);
+  });
+
+  it("returns empty manifests when all agents are standalone", async () => {
+    const orch = new Orchestrator({
+      agents: [
+        { ...agent("a"), standalone: true },
+        { ...agent("b"), standalone: true },
+      ],
+    });
+    const result = await orch.run("Task");
+
+    expect(result).toEqual([]);
+    expect(mockRunAgent).not.toHaveBeenCalled();
+  });
+
+  it("fires orchestrator_done with only pipeline manifests", async () => {
+    mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+    const events: ProgressEvent[] = [];
+    const orch = new Orchestrator({
+      agents: [
+        agent("a"),
+        { ...agent("standalone-helper"), standalone: true },
+      ],
+      onProgress: (e) => events.push(e),
+    });
+    await orch.run("Task");
+
+    const done = events.find((e) => e.type === "orchestrator_done") as any;
+    expect(done.manifests).toHaveLength(1);
+    expect(done.manifests[0].agent).toBe("a");
+  });
+
   // ── Graph errors bubble up ───────────────────────────────
 
   it("throws on cyclic dependencies", async () => {
