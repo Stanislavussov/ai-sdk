@@ -164,6 +164,13 @@ const schema = {
           description:
             "Thinking level override for this agent. Falls back to the top-level thinkingLevel.",
         },
+        standalone: {
+          type: "boolean" as const,
+          default: false,
+          description:
+            "When true, exclude this agent from the orchestration pipeline. " +
+            "It can still be run individually via run_agent or /agent <name> <task>.",
+        },
       },
     },
   },
