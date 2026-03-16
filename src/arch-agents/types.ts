@@ -57,4 +57,14 @@ export type ProgressEvent =
   | { type: "agent_start"; agent: string; model: string }
   | { type: "agent_done"; agent: string; manifest: AgentManifest }
   | { type: "agent_error"; agent: string; error: Error }
-  | { type: "orchestrator_done"; manifests: AgentManifest[] };
+  | { type: "orchestrator_done"; manifests: AgentManifest[] }
+  | {
+      /**
+       * Informal, human-readable status of what an agent is currently doing.
+       * Emitted in real time as the agent works (e.g. "Reading src/index.ts",
+       * "Running: npm test", "Thinking…").
+       */
+      type: "agent_activity";
+      agent: string;
+      message: string;
+    };

@@ -22,9 +22,26 @@ const {
   mockResourceLoader,
   mockAuthStorageCreate,
 } = vi.hoisted(() => {
+  /** Captured session event listeners (populated by subscribe()) */
+  let sessionListeners: Array<(e: any) => void> = [];
+
   const mockSession = {
     prompt: vi.fn(),
     dispose: vi.fn(),
+    subscribe: vi.fn((listener: (e: any) => void) => {
+      sessionListeners.push(listener);
+      return () => {
+        sessionListeners = sessionListeners.filter((l) => l !== listener);
+      };
+    }),
+    /** Test helper: emit an event to all current subscribers */
+    _emit(event: any) {
+      for (const l of sessionListeners) l(event);
+    },
+    /** Test helper: reset subscribers */
+    _resetListeners() {
+      sessionListeners = [];
+    },
   };
   return {
     mockSession,
@@ -112,6 +129,8 @@ describe("runAgent", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-factory-test-"));
     mockSession.prompt.mockReset();
     mockSession.dispose.mockReset();
+    mockSession.subscribe.mockClear();
+    mockSession._resetListeners();
     mockCreateAgentSession.mockClear();
     mockCreateCodingTools.mockClear();
     mockCreateReadOnlyTools.mockClear();
@@ -500,5 +519,314 @@ describe("runAgent", () => {
     expect(mockCreateAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({ thinkingLevel: "medium" }),
     );
+  });
+
+  // ── Agent activity events ────────────────────────────────
+
+  describe("agent_activity progress events", () => {
+    function mockSessionWithEvents(manifest: AgentManifest, events: any[]) {
+      mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
+        // Emit events during prompt execution
+        for (const e of events) mockSession._emit(e);
+
+        const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+        if (match) {
+          fs.writeFileSync(match[1], JSON.stringify(manifest));
+        }
+      });
+    }
+
+    it("subscribes to session events when onProgress is provided", async () => {
+      mockSessionWithEvents(validManifest(), []);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(mockSession.subscribe).toHaveBeenCalled();
+    });
+
+    it("does not subscribe when onProgress is absent", async () => {
+      mockSessionWritesManifest(validManifest());
+
+      await runAgent(agent(), "task", "ctx", config());
+
+      expect(mockSession.subscribe).not.toHaveBeenCalled();
+    });
+
+    it("emits agent_activity for message_start (thinking)", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "message_start", message: {} },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(onProgress).toHaveBeenCalledWith({
+        type: "agent_activity",
+        agent: "test-agent",
+        message: "🧠 Thinking…",
+      });
+    });
+
+    it("emits agent_activity for read tool", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "Read", args: { path: "src/index.ts" } },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(onProgress).toHaveBeenCalledWith({
+        type: "agent_activity",
+        agent: "test-agent",
+        message: "📖 Reading src/index.ts",
+      });
+    });
+
+    it("emits agent_activity for bash tool with command", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "Bash", args: { command: "npm test" } },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(onProgress).toHaveBeenCalledWith({
+        type: "agent_activity",
+        agent: "test-agent",
+        message: "⚡ Running: npm test",
+      });
+    });
+
+    it("emits agent_activity for edit tool", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "Edit", args: { path: "src/foo.ts" } },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(onProgress).toHaveBeenCalledWith({
+        type: "agent_activity",
+        agent: "test-agent",
+        message: "✏️ Editing src/foo.ts",
+      });
+    });
+
+    it("emits agent_activity for write tool", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "Write", args: { path: "new-file.ts" } },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(onProgress).toHaveBeenCalledWith({
+        type: "agent_activity",
+        agent: "test-agent",
+        message: "📝 Writing new-file.ts",
+      });
+    });
+
+    it("emits agent_activity for grep tool", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "Grep", args: { pattern: "TODO" } },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(onProgress).toHaveBeenCalledWith({
+        type: "agent_activity",
+        agent: "test-agent",
+        message: '🔍 Searching for "TODO"',
+      });
+    });
+
+    it("emits agent_activity for find tool", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "Find", args: { pattern: "*.test.ts" } },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(onProgress).toHaveBeenCalledWith({
+        type: "agent_activity",
+        agent: "test-agent",
+        message: '🔎 Finding files matching "*.test.ts"',
+      });
+    });
+
+    it("emits agent_activity for ls tool", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "Ls", args: { path: "src/" } },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(onProgress).toHaveBeenCalledWith({
+        type: "agent_activity",
+        agent: "test-agent",
+        message: "📂 Listing src/",
+      });
+    });
+
+    it("emits agent_activity for unknown custom tool", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "deploy", args: {} },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(onProgress).toHaveBeenCalledWith({
+        type: "agent_activity",
+        agent: "test-agent",
+        message: "🔧 Using tool: deploy",
+      });
+    });
+
+    it("emits agent_activity for tool failure", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_end", toolCallId: "1", toolName: "Bash", result: {}, isError: true },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(onProgress).toHaveBeenCalledWith({
+        type: "agent_activity",
+        agent: "test-agent",
+        message: "❌ Tool Bash failed",
+      });
+    });
+
+    it("does not emit agent_activity for successful tool_execution_end", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_end", toolCallId: "1", toolName: "Read", result: {}, isError: false },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      const activityEvents = onProgress.mock.calls
+        .map(([e]: any) => e)
+        .filter((e: any) => e.type === "agent_activity");
+      expect(activityEvents).toHaveLength(0);
+    });
+
+    it("does not emit agent_activity for irrelevant events", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "turn_start" },
+        { type: "turn_end", message: {}, toolResults: [] },
+        { type: "agent_end", messages: [] },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      const activityEvents = onProgress.mock.calls
+        .map(([e]: any) => e)
+        .filter((e: any) => e.type === "agent_activity");
+      expect(activityEvents).toHaveLength(0);
+    });
+
+    it("unsubscribes from session events after completion", async () => {
+      const unsubscribe = vi.fn();
+      mockSession.subscribe.mockReturnValueOnce(unsubscribe);
+      mockSessionWithEvents(validManifest(), []);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      expect(unsubscribe).toHaveBeenCalled();
+    });
+
+    it("unsubscribes from session events even on error", async () => {
+      const unsubscribe = vi.fn();
+      mockSession.subscribe.mockReturnValueOnce(unsubscribe);
+      mockSession.prompt.mockRejectedValue(new Error("Boom"));
+      const onProgress = vi.fn();
+
+      await expect(
+        runAgent(agent(), "task", "ctx", config({ onProgress })),
+      ).rejects.toThrow();
+
+      expect(unsubscribe).toHaveBeenCalled();
+    });
+
+    it("handles lowercase tool names (e.g. from custom tools)", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "read", args: { path: "README.md" } },
+        { type: "tool_execution_start", toolCallId: "2", toolName: "bash", args: { command: "ls" } },
+        { type: "tool_execution_start", toolCallId: "3", toolName: "edit", args: { path: "x.ts" } },
+        { type: "tool_execution_start", toolCallId: "4", toolName: "write", args: { path: "y.ts" } },
+        { type: "tool_execution_start", toolCallId: "5", toolName: "grep", args: { pattern: "foo" } },
+        { type: "tool_execution_start", toolCallId: "6", toolName: "find", args: { pattern: "*.md" } },
+        { type: "tool_execution_start", toolCallId: "7", toolName: "ls", args: { path: "." } },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      const activities = onProgress.mock.calls
+        .map(([e]: any) => e)
+        .filter((e: any) => e.type === "agent_activity")
+        .map((e: any) => e.message);
+
+      expect(activities).toEqual([
+        "📖 Reading README.md",
+        "⚡ Running: ls",
+        "✏️ Editing x.ts",
+        "📝 Writing y.ts",
+        '🔍 Searching for "foo"',
+        '🔎 Finding files matching "*.md"',
+        "📂 Listing .",
+      ]);
+    });
+
+    it("truncates long bash commands to 120 chars", async () => {
+      const longCmd = "a".repeat(200);
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "Bash", args: { command: longCmd } },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      const activity = onProgress.mock.calls
+        .map(([e]: any) => e)
+        .find((e: any) => e.type === "agent_activity");
+
+      expect(activity.message).toBe(`⚡ Running: ${"a".repeat(120)}`);
+    });
+
+    it("handles missing args gracefully", async () => {
+      mockSessionWithEvents(validManifest(), [
+        { type: "tool_execution_start", toolCallId: "1", toolName: "Read", args: {} },
+        { type: "tool_execution_start", toolCallId: "2", toolName: "Bash", args: {} },
+        { type: "tool_execution_start", toolCallId: "3", toolName: "Grep", args: {} },
+        { type: "tool_execution_start", toolCallId: "4", toolName: "Find", args: {} },
+        { type: "tool_execution_start", toolCallId: "5", toolName: "Ls", args: {} },
+      ]);
+      const onProgress = vi.fn();
+
+      await runAgent(agent(), "task", "ctx", config({ onProgress }));
+
+      const activities = onProgress.mock.calls
+        .map(([e]: any) => e)
+        .filter((e: any) => e.type === "agent_activity")
+        .map((e: any) => e.message);
+
+      expect(activities).toEqual([
+        "📖 Reading a file",
+        "⚡ Running a command",
+        "🔍 Searching files",
+        "🔎 Finding files",
+        "📂 Listing directory",
+      ]);
+    });
   });
 });
