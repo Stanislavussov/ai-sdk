@@ -27,7 +27,15 @@ export class Orchestrator {
           this.config.onProgress?.({ type: "agent_start", agent: def.name, model: modelId });
 
           try {
-            const context = bus.getContext(def.dependsOn ?? []);
+            const deps = def.dependsOn ?? [];
+            if (deps.length > 0) {
+              this.config.onProgress?.({
+                type: "agent_activity",
+                agent: def.name,
+                message: `📨 Receiving context from ${deps.join(", ")}`,
+              });
+            }
+            const context = bus.getContext(deps);
             const manifest = await runAgent(def, task, context, this.config);
             bus.set(manifest);
             this.config.onProgress?.({ type: "agent_done", agent: def.name, manifest });

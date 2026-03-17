@@ -377,6 +377,74 @@ describe("Orchestrator", () => {
     expect(done.manifests[0].agent).toBe("a");
   });
 
+  // ── Context passing activity ──────────────────────────────
+
+  it("emits agent_activity when receiving context from dependencies", async () => {
+    mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+    const events: ProgressEvent[] = [];
+    const orch = new Orchestrator({
+      agents: [agent("api"), agent("db", ["api"])],
+      model: TEST_MODEL,
+      onProgress: (e) => events.push(e),
+    });
+    await orch.run("Task");
+
+    const activity = events.filter((e) => e.type === "agent_activity");
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toEqual({
+      type: "agent_activity",
+      agent: "db",
+      message: "📨 Receiving context from api",
+    });
+  });
+
+  it("lists multiple dependencies in the context activity message", async () => {
+    mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+    const events: ProgressEvent[] = [];
+    const orch = new Orchestrator({
+      agents: [agent("api"), agent("auth"), agent("db", ["api", "auth"])],
+      model: TEST_MODEL,
+      onProgress: (e) => events.push(e),
+    });
+    await orch.run("Task");
+
+    const activity = events.filter((e) => e.type === "agent_activity");
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toEqual({
+      type: "agent_activity",
+      agent: "db",
+      message: "📨 Receiving context from api, auth",
+    });
+  });
+
+  it("does not emit context activity for root agents (no dependencies)", async () => {
+    mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+    const events: ProgressEvent[] = [];
+    const orch = new Orchestrator({
+      agents: [agent("a"), agent("b")],
+      model: TEST_MODEL,
+      onProgress: (e) => events.push(e),
+    });
+    await orch.run("Task");
+
+    const activity = events.filter((e) => e.type === "agent_activity");
+    expect(activity).toHaveLength(0);
+  });
+
+  it("does not emit context activity when onProgress is absent", async () => {
+    mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+    // Should not throw — just silently skip
+    const orch = new Orchestrator({
+      agents: [agent("a"), agent("b", ["a"])],
+      model: TEST_MODEL,
+    });
+    await expect(orch.run("Task")).resolves.toBeDefined();
+  });
+
   // ── Graph errors bubble up ───────────────────────────────
 
   it("throws on cyclic dependencies", async () => {
