@@ -53,15 +53,11 @@ export interface OrchestratorConfig {
 }
 
 export type ProgressEvent =
-  | { type: "wave_start"; wave: number; name: string; agents: string[] }
+  | { type: "wave_start"; wave: number; agents: string[] }
   | { type: "agent_start"; agent: string; model: string }
   | { type: "agent_done"; agent: string; manifest: AgentManifest }
   | { type: "agent_error"; agent: string; error: Error }
-<<<<<<< HEAD
   | { type: "orchestrator_done"; manifests: AgentManifest[] }
-=======
-  | { type: "orchestrator_done"; result: OrchestratorResult; totalTimeMs: number }
->>>>>>> 32c01bf (feat: update orchestrator progress events to include wave names and total execution time)
   | {
       /**
        * Informal, human-readable status of what an agent is currently doing.

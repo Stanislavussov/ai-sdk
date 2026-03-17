@@ -356,7 +356,7 @@ describe("extension.ts", () => {
         // Get the onProgress from the config passed to createOrchestrator
         const calls = mockCreateOrchestrator.mock.calls as unknown as Array<[Record<string, any>]>;
         const config = calls.at(-1)![0];
-        config.onProgress({ type: "wave_start", wave: 1, name: "Wave 1", agents: ["a"] });
+        config.onProgress({ type: "wave_start", wave: 1, agents: ["a"] });
         config.onProgress({ type: "agent_start", agent: "a", model: "test/model" });
         config.onProgress({
           type: "agent_done",
@@ -365,12 +365,7 @@ describe("extension.ts", () => {
         });
         config.onProgress({
           type: "orchestrator_done",
-<<<<<<< HEAD
           manifests,
-=======
-          result: orchestratorResult,
-          totalTimeMs: 1234,
->>>>>>> 32c01bf (feat: update orchestrator progress events to include wave names and total execution time)
         });
         return manifests;
       });
@@ -400,22 +395,13 @@ describe("extension.ts", () => {
       mockRun.mockImplementation(async () => {
         const calls = mockCreateOrchestrator.mock.calls as unknown as Array<[Record<string, any>]>;
         const config = calls.at(-1)![0];
-        config.onProgress({ type: "wave_start", wave: 1, name: "Wave 1", agents: ["broken"] });
+        config.onProgress({ type: "wave_start", wave: 1, agents: ["broken"] });
         config.onProgress({
           type: "agent_error",
           agent: "broken",
           error: new Error("Something failed"),
         });
-<<<<<<< HEAD
         return manifests;
-=======
-        config.onProgress({
-          type: "orchestrator_done",
-          result: orchestratorResult,
-          totalTimeMs: 500,
-        });
-        return orchestratorResult;
->>>>>>> 32c01bf (feat: update orchestrator progress events to include wave names and total execution time)
       });
 
       const tool = await setupWithConfig(

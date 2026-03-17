@@ -81,7 +81,7 @@ function buildProgressHandler(onUpdate?: (result: any) => void) {
   const onProgress = (event: ProgressEvent): void => {
     switch (event.type) {
       case "wave_start":
-        lines.push(`→ ${event.name}: [${event.agents.join(", ")}]`);
+        lines.push(`→ Wave ${event.wave}: [${event.agents.join(", ")}]`);
         break;
       case "agent_start":
         lines.push(`  ▶ ${event.agent} starting (${event.model})`);
@@ -92,26 +92,8 @@ function buildProgressHandler(onUpdate?: (result: any) => void) {
       case "agent_error":
         lines.push(`  ✗ ${event.agent}: ${event.error.message}`);
         break;
-<<<<<<< HEAD
       case "orchestrator_done":
         lines.push(`✓ Orchestration complete — ${event.manifests.length} agents finished`);
-=======
-      case "orchestrator_done": {
-        const { manifests, failures, skipped } = event.result;
-        const totalSecs = (event.totalTimeMs / 1000).toFixed(1);
-        if (failures.length === 0 && skipped.length === 0) {
-          lines.push(`✅ Orchestration complete — ${manifests.length} agents finished in ${totalSecs}s`);
-        } else {
-          lines.push(`⚠️ Orchestration partial — ${manifests.length} succeeded, ${failures.length} failed, ${skipped.length} skipped (${totalSecs}s)`);
-        }
-        break;
-      }
-      case "agent_retry":
-        lines.push(`  🔄 ${event.agent}: retry ${event.attempt}/${event.maxAttempts} in ${Math.round(event.delayMs / 1000)}s`);
-        break;
-      case "agent_skipped":
-        lines.push(`  ⏭️ ${event.agent}: skipped (${event.reason})`);
->>>>>>> 32c01bf (feat: update orchestrator progress events to include wave names and total execution time)
         break;
     }
     onUpdate?.({
