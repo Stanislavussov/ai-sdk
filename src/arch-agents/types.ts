@@ -29,6 +29,19 @@ export interface AgentDefinition {
    * @default false
    */
   standalone?: boolean;
+  /**
+   * Nested sub-agents that form a mini-pipeline under this agent.
+   *
+   * When an agent has `subAgents`, it becomes a **composite agent**:
+   * - Sub-agents run in waves according to their own `dependsOn` (referencing siblings).
+   * - Sub-agents inherit `model` and `thinkingLevel` from the parent if not specified.
+   * - The parent's upstream dependency context is forwarded to root sub-agents.
+   * - The composite agent's manifest merges all sub-agent manifests.
+   * - Sub-agents can themselves have `subAgents` (recursive nesting).
+   *
+   * Progress events for sub-agents use qualified names: "parent/child" (or "a/b/c" for deeper nesting).
+   */
+  subAgents?: AgentDefinition[];
 }
 
 export interface AgentManifest {

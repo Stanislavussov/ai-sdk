@@ -1,10 +1,73 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type, type TObject, type TOptional, type TArray } from "@sinclair/typebox";
 import { createOrchestrator } from "./arch-agents/index.js";
 import { runAgent } from "./arch-agents/agent/agent-factory.js";
 import type { AgentDefinition, AgentManifest, AgentType, OrchestratorConfig, ProgressEvent } from "./arch-agents/types.js";
+
+// ── Inline agent definition schema (recursive for subAgents) ──
+
+function buildAgentDefinitionSchema(): TObject {
+  // TypeBox doesn't support recursive refs easily, so we use a two-level
+  // inline definition (subAgents → subAgents) which covers practical usage.
+  const subAgentProps = {
+    name: Type.String({ description: "Unique agent identifier" }),
+    role: Type.String({ description: "What this agent is responsible for" }),
+    rules: Type.String({ description: "Constraints and style rules" }),
+    dependsOn: Type.Optional(
+      Type.Array(Type.String(), { description: "Agent names this agent depends on (sibling sub-agents)" }),
+    ),
+    model: Type.Optional(Type.String({ description: "Model override for this agent" })),
+    type: Type.Optional(
+      Type.String({
+        description:
+          'Agent type: "coding" (read/bash/edit/write), "readonly" (read/grep/find/ls), "all" (every tool), "none" (no built-in tools). Default: "coding"',
+      }),
+    ),
+    enabledTools: Type.Optional(
+      Type.Array(Type.String(), {
+        description: "Cherry-pick specific tools: read, bash, edit, write, grep, find, ls. Overrides type.",
+      }),
+    ),
+    skills: Type.Optional(
+      Type.Array(Type.String(), { description: "Skill directory paths" }),
+    ),
+    standalone: Type.Optional(
+      Type.Boolean({
+        description: "When true, exclude this agent from the orchestration pipeline.",
+      }),
+    ),
+  };
+
+  // Level 2 sub-agent (deepest inline level — no further subAgents in tool params)
+  const level2 = Type.Object(subAgentProps);
+
+  // Level 1 sub-agent (can have subAgents at level 2)
+  const level1 = Type.Object({
+    ...subAgentProps,
+    subAgents: Type.Optional(
+      Type.Array(level2, {
+        description: "Nested sub-agents (one more level of nesting).",
+      }),
+    ),
+  });
+
+  // Top-level agent definition (can have subAgents at level 1)
+  return Type.Object({
+    ...subAgentProps,
+    subAgents: Type.Optional(
+      Type.Array(level1, {
+        description:
+          "Nested sub-agents forming a mini-pipeline under this agent. " +
+          "Sub-agents run in waves, inherit model/thinkingLevel from parent, " +
+          "and their manifests merge into the parent's manifest.",
+      }),
+    ),
+  });
+}
+
+const AgentDefinitionSchema = buildAgentDefinitionSchema();
 
 // ── Config schema ──────────────────────────────────────────
 // Loaded from .pi/settings.json → "orchestrator" key
@@ -27,6 +90,7 @@ interface AgentDefinitionConfig {
   skills?: string[];
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
   standalone?: boolean;
+  subAgents?: AgentDefinitionConfig[];
 }
 
 // ── Config loading ─────────────────────────────────────────
@@ -151,45 +215,11 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
       agents: Type.Optional(
-        Type.Array(
-          Type.Object({
-            name: Type.String({ description: "Unique agent identifier" }),
-            role: Type.String({ description: "What this agent is responsible for" }),
-            rules: Type.String({ description: "Constraints and style rules" }),
-            dependsOn: Type.Optional(
-              Type.Array(Type.String(), {
-                description: "Agent names this agent depends on",
-              }),
-            ),
-            model: Type.Optional(Type.String({ description: "Model override for this agent" })),
-            type: Type.Optional(
-              Type.String({
-                description:
-                  'Agent type: "coding" (read/bash/edit/write), "readonly" (read/grep/find/ls), "all" (every tool), "none" (no built-in tools). Default: "coding"',
-              }),
-            ),
-            enabledTools: Type.Optional(
-              Type.Array(Type.String(), {
-                description:
-                  "Cherry-pick specific tools: read, bash, edit, write, grep, find, ls. Overrides type.",
-              }),
-            ),
-            skills: Type.Optional(
-              Type.Array(Type.String(), { description: "Skill directory paths" }),
-            ),
-            standalone: Type.Optional(
-              Type.Boolean({
-                description:
-                  "When true, exclude this agent from the orchestration pipeline. " +
-                  "It can still be run individually via run_agent.",
-              }),
-            ),
-          }),
-          {
-            description:
-              "Agent definitions. Only needed if .pi/settings.json has no orchestrator config.",
-          },
-        ),
+        Type.Array(AgentDefinitionSchema, {
+          description:
+            "Agent definitions. Only needed if .pi/settings.json has no orchestrator config. " +
+            "Agents can have nested subAgents for tree structures.",
+        }),
       ),
     }),
 
@@ -304,6 +334,14 @@ export default function (pi: ExtensionAPI) {
       skills: Type.Optional(
         Type.Array(Type.String(), { description: "Skill directory paths" }),
       ),
+      subAgents: Type.Optional(
+        Type.Array(AgentDefinitionSchema, {
+          description:
+            "Nested sub-agents forming a mini-pipeline under this agent. " +
+            "When provided, the agent becomes composite: sub-agents run in waves " +
+            "and their manifests merge into the parent's manifest.",
+        }),
+      ),
     }),
 
     async execute(toolCallId, params, signal, onUpdate, ctx) {
@@ -330,6 +368,7 @@ export default function (pi: ExtensionAPI) {
         enabledTools: params.enabledTools ?? configAgent?.enabledTools,
         skills: params.skills ?? configAgent?.skills,
         thinkingLevel: configAgent?.thinkingLevel,
+        subAgents: (params.subAgents ?? configAgent?.subAgents) as AgentDefinition[] | undefined,
       };
 
       const dependencyContext =
@@ -343,23 +382,37 @@ export default function (pi: ExtensionAPI) {
         );
       }
 
+      const isComposite = agentDef.subAgents && agentDef.subAgents.length > 0;
+
       onUpdate?.({
         content: [
           {
             type: "text",
-            text: `▶ Running agent "${agentDef.name}" (${agentDef.model ?? model})...`,
+            text: isComposite
+              ? `▶ Running composite agent "${agentDef.name}" with ${agentDef.subAgents!.length} sub-agent(s) (${agentDef.model ?? model})...`
+              : `▶ Running agent "${agentDef.name}" (${agentDef.model ?? model})...`,
           },
         ],
         details: {},
       });
 
-      const manifest = await runAgent(agentDef, params.task, dependencyContext, {
+      const agentConfig: OrchestratorConfig = {
         agents: [agentDef],
         model,
         thinkingLevel: projectConfig?.thinkingLevel,
         cwd: ctx.cwd,
         manifestDir: projectConfig?.manifestDir,
-      });
+      };
+
+      let manifest: AgentManifest;
+      if (isComposite) {
+        // Use orchestrator for composite agents so sub-agents are executed
+        const app = createOrchestrator(agentConfig);
+        const manifests = await app.run(params.task, dependencyContext);
+        manifest = manifests[0];
+      } else {
+        manifest = await runAgent(agentDef, params.task, dependencyContext, agentConfig);
+      }
 
       return {
         content: [
@@ -471,22 +524,38 @@ export default function (pi: ExtensionAPI) {
       const pipelineAgents = projectConfig.agents.filter((a) => !a.standalone);
       const standaloneAgents = projectConfig.agents.filter((a) => a.standalone);
 
-      const lines = pipelineAgents.map((a) => {
+      function formatAgent(
+        a: AgentDefinitionConfig,
+        indent: string,
+        bullet: string,
+        defaultModel: string,
+      ): string[] {
         const deps = a.dependsOn?.length
           ? `depends on: ${a.dependsOn.join(", ")}`
           : "no dependencies";
-        const model = a.model ?? projectConfig!.model ?? "default";
+        const model = a.model ?? defaultModel;
         const type = a.type ?? "coding";
-        return `  • ${a.name} (${type}, ${model}) — ${a.role} [${deps}]`;
-      });
+        const subLabel = a.subAgents?.length ? ` [composite: ${a.subAgents.length} sub-agent(s)]` : "";
+        const result = [`${indent}${bullet} ${a.name} (${type}, ${model}) — ${a.role} [${deps}]${subLabel}`];
+        if (a.subAgents) {
+          for (const sub of a.subAgents) {
+            result.push(...formatAgent(sub, indent + "  ", "↳", a.model ?? defaultModel));
+          }
+        }
+        return result;
+      }
+
+      const defaultModel = projectConfig!.model ?? "default";
+      const lines: string[] = [];
+      for (const a of pipelineAgents) {
+        lines.push(...formatAgent(a, "  ", "•", defaultModel));
+      }
 
       if (standaloneAgents.length > 0) {
         lines.push("");
         lines.push("Standalone (not in pipeline):");
         for (const a of standaloneAgents) {
-          const model = a.model ?? projectConfig!.model ?? "default";
-          const type = a.type ?? "coding";
-          lines.push(`  ◦ ${a.name} (${type}, ${model}) — ${a.role}`);
+          lines.push(...formatAgent(a, "  ", "◦", defaultModel));
         }
       }
 

@@ -3,6 +3,6 @@ import type { AgentManifest, OrchestratorConfig } from "../types.js";
 
 export function createOrchestrator(
   config: OrchestratorConfig,
-): { run(task: string): Promise<AgentManifest[]> } {
+): { run(task: string, parentContext?: string): Promise<AgentManifest[]> } {
   return new Orchestrator(config);
 }

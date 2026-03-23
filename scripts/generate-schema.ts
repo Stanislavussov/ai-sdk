@@ -171,6 +171,17 @@ const schema = {
             "When true, exclude this agent from the orchestration pipeline. " +
             "It can still be run individually via run_agent or /agent <name> <task>.",
         },
+        subAgents: {
+          type: "array" as const,
+          items: { $ref: "#/$defs/agentDefinition" },
+          description:
+            "Nested sub-agents that form a mini-pipeline under this agent. " +
+            "When present, the agent becomes a composite agent: sub-agents run in waves " +
+            "according to their own dependsOn (referencing siblings), inherit model/thinkingLevel " +
+            "from the parent, and their manifests are merged into the parent's manifest. " +
+            "Sub-agents can themselves have subAgents for deeper nesting. " +
+            "Progress events use qualified names like \"parent/child\".",
+        },
       },
     },
   },
