@@ -4,6 +4,30 @@ export function buildAgentSystemPrompt(
   def: AgentDefinition,
   dependencyContext: string,
 ): string {
+  // Check if agent has write capability
+  const hasWrite = def.enabledTools
+    ? def.enabledTools.includes("write")
+    : (def.type ?? "coding") !== "readonly" && (def.type ?? "coding") !== "none";
+
+  const manifestInstructions = hasWrite
+    ? [
+        "## ⚠️ CRITICAL RESPONSIBILITIES ⚠️",
+        "1. Stay strictly within your layer - do not modify files owned by other agents",
+        "2. When complete, YOU MUST write a manifest JSON file to the path specified in the task prompt",
+        "   - Use the 'write' tool with the exact path provided",
+        "   - Write pure JSON only (no markdown fences, no extra text)",
+        "   - Use schema: { changedFiles: string[], summary: string, exports: Record<string,string> }",
+        '   - Example: { "changedFiles": ["src/api.ts"], "summary": "Added API", "exports": { "API": "src/api.ts:1" } }',
+        "3. DO NOT finish your response until the manifest file is written",
+        "4. The orchestration will FAIL if you don't write the manifest file",
+      ]
+    : [
+        "## Responsibilities",
+        "1. You are a read-only agent — do NOT create, modify, or delete any files",
+        "2. Provide your analysis/findings directly in your response text",
+        "3. Be thorough but concise",
+      ];
+
   return [
     `You are the ${def.name} agent, responsible for the ${def.role}.`,
     "",
@@ -13,15 +37,16 @@ export function buildAgentSystemPrompt(
     "## Context from upstream agents",
     dependencyContext,
     "",
-    "## ⚠️ CRITICAL RESPONSIBILITIES ⚠️",
-    "1. Stay strictly within your layer - do not modify files owned by other agents",
-    "2. When complete, YOU MUST write a manifest JSON file to the path specified in the task prompt",
-    "   - Use the 'write' tool with the exact path provided",
-    "   - Write pure JSON only (no markdown fences, no extra text)",
-    "   - Use schema: { changedFiles: string[], summary: string, exports: Record<string,string> }",
-    "   - Example: { \"changedFiles\": [\"src/api.ts\"], \"summary\": \"Added API\", \"exports\": { \"API\": \"src/api.ts:1\" } }",
-    "3. DO NOT finish your response until the manifest file is written",
-    "4. The orchestration will FAIL if you don't write the manifest file",
+    ...manifestInstructions,
+  ].join("\n");
+}
+
+export function buildReadOnlyTaskPrompt(task: string): string {
+  return [
+    "## Task",
+    task,
+    "",
+    "Provide your analysis directly in your response. Do NOT create or modify any files.",
   ].join("\n");
 }
 

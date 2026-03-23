@@ -20,7 +20,7 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import type { AgentEvent, AgentTool } from "@mariozechner/pi-agent-core";
 import { resolveModel } from "../model/model-resolver.js";
-import { buildAgentSystemPrompt, buildOrchestratorTaskPrompt } from "../prompts/prompts.js";
+import { buildAgentSystemPrompt, buildOrchestratorTaskPrompt, buildReadOnlyTaskPrompt } from "../prompts/prompts.js";
 import { AGENT_TYPES, TOOL_NAMES } from "../constants.js";
 import type { AgentDefinition, AgentManifest, AgentType, OrchestratorConfig } from "../types.js";
 
@@ -227,17 +227,11 @@ export async function runAgent(
   // Resolve built-in tools based on type / enabledTools
   const builtinTools = resolveBuiltinTools(def, cwd);
 
-  // Validate that agent has write tool (required for manifest)
+  // Check if agent has write tool — needed for manifest file protocol
   const hasWriteTool = builtinTools.some((tool) =>
     tool.name === "write" || tool.name === "Write"
   );
-  if (!hasWriteTool) {
-    throw new Error(
-      `Agent "${def.name}" must have the "write" tool to create its manifest. ` +
-      `Current type: "${def.type ?? "coding"}". ` +
-      `Use type="coding" or type="all", or add "write" to enabledTools.`
-    );
-  }
+  const skipManifestFile = !hasWriteTool;
 
   const { session } = await createAgentSession({
     sessionManager: SessionManager.inMemory(),
@@ -262,11 +256,40 @@ export async function runAgent(
     });
   }
 
+  // Capture last assistant text for read-only agents that skip manifest files
+  let lastAssistantText = "";
+  let unsubCapture: (() => void) | undefined;
+  if (skipManifestFile) {
+    unsubCapture = session.subscribe((event) => {
+      if (
+        event.type === "message_update" &&
+        event.assistantMessageEvent.type === "text_delta"
+      ) {
+        lastAssistantText += event.assistantMessageEvent.delta;
+      }
+    });
+  }
+
   try {
-    await session.prompt(buildOrchestratorTaskPrompt(task, manifestPath));
+    if (skipManifestFile) {
+      await session.prompt(buildReadOnlyTaskPrompt(task));
+    } else {
+      await session.prompt(buildOrchestratorTaskPrompt(task, manifestPath));
+    }
   } finally {
+    unsubCapture?.();
     unsubActivity?.();
     session.dispose();
+  }
+
+  if (skipManifestFile) {
+    // Read-only agent: build manifest from captured output (no file write needed)
+    return {
+      agent: def.name,
+      changedFiles: [],
+      summary: lastAssistantText.trim() || "(no output)",
+      exports: {},
+    };
   }
 
   if (!fs.existsSync(manifestPath)) {

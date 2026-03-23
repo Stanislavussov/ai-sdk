@@ -261,13 +261,13 @@ describe("runAgent", () => {
     expect(mockCreateLsTool).toHaveBeenCalled();
   });
 
-  it('throws for type "none" without write tool', async () => {
+  it('type "none" runs as read-only agent without manifest', async () => {
     mockSessionWritesManifest(validManifest());
 
-    await expect(
-      runAgent(agent({ type: "none" }), "task", "ctx", config())
-    ).rejects.toThrow(/must have the "write" tool/);
+    const result = await runAgent(agent({ type: "none" }), "task", "ctx", config());
 
+    expect(result.agent).toBe("test-agent");
+    expect(result.changedFiles).toEqual([]);
     expect(mockCreateCodingTools).not.toHaveBeenCalled();
     expect(mockCreateReadOnlyTools).not.toHaveBeenCalled();
   });
