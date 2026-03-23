@@ -37,8 +37,8 @@ describe("buildAgentSystemPrompt", () => {
   it("includes responsibility guidelines", () => {
     const prompt = buildAgentSystemPrompt(agent(), "");
     expect(prompt).toContain("Stay strictly within your layer");
-    expect(prompt).toContain("Do not modify files owned by other agents");
-    expect(prompt).toContain("write manifest JSON");
+    expect(prompt).toContain("do not modify files owned by other agents");
+    expect(prompt).toContain("write a manifest JSON file");
   });
 
   it("uses different agent names correctly", () => {
@@ -79,12 +79,12 @@ describe("buildOrchestratorTaskPrompt", () => {
 
   it("tells the agent not to stop until manifest is written", () => {
     const prompt = buildOrchestratorTaskPrompt("task", "/tmp/m.json");
-    expect(prompt).toContain("Do not stop until the manifest file has been written");
+    expect(prompt).toContain("Do not respond with completion until the manifest file has been written");
   });
 
   it("mentions no markdown fences", () => {
     const prompt = buildOrchestratorTaskPrompt("task", "/tmp/m.json");
-    expect(prompt).toContain("no markdown fences");
+    expect(prompt).toContain("no markdown code fences");
   });
 
   it("has a Task section header", () => {
@@ -94,6 +94,6 @@ describe("buildOrchestratorTaskPrompt", () => {
 
   it("has a Required manifest section header", () => {
     const prompt = buildOrchestratorTaskPrompt("task", "/tmp/m.json");
-    expect(prompt).toContain("## Required: write your manifest");
+    expect(prompt).toContain("CRITICAL REQUIREMENT");
   });
 });

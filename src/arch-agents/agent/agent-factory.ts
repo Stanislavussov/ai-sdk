@@ -227,6 +227,18 @@ export async function runAgent(
   // Resolve built-in tools based on type / enabledTools
   const builtinTools = resolveBuiltinTools(def, cwd);
 
+  // Validate that agent has write tool (required for manifest)
+  const hasWriteTool = builtinTools.some((tool) =>
+    tool.name === "write" || tool.name === "Write"
+  );
+  if (!hasWriteTool) {
+    throw new Error(
+      `Agent "${def.name}" must have the "write" tool to create its manifest. ` +
+      `Current type: "${def.type ?? "coding"}". ` +
+      `Use type="coding" or type="all", or add "write" to enabledTools.`
+    );
+  }
+
   const { session } = await createAgentSession({
     sessionManager: SessionManager.inMemory(),
     cwd,

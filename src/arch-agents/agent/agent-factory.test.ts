@@ -47,8 +47,13 @@ const {
     mockSession,
     mockCreateAgentSession: vi.fn(async () => ({ session: mockSession })),
     mockResolveModel: vi.fn(() => undefined),
-    mockCreateCodingTools: vi.fn(() => [{ name: "coding-tool" }]),
-    mockCreateReadOnlyTools: vi.fn(() => [{ name: "readonly-tool" }]),
+    mockCreateCodingTools: vi.fn(() => [
+      { name: "read" },
+      { name: "bash" },
+      { name: "edit" },
+      { name: "write" }
+    ]),
+    mockCreateReadOnlyTools: vi.fn(() => [{ name: "read" }]),
     mockCreateReadTool: vi.fn(() => ({ name: "read" })),
     mockCreateBashTool: vi.fn(() => ({ name: "bash" })),
     mockCreateEditTool: vi.fn(() => ({ name: "edit" })),
@@ -154,9 +159,11 @@ describe("runAgent", () => {
   function mockSessionWritesManifest(manifest: AgentManifest) {
     mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
       // Extract the manifest path from the task prompt
-      const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+      // Matches both old format: "Write valid JSON ... to: /path" 
+      // and new format: "Use the 'write' tool to create the file: /path"
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
       if (match) {
-        fs.writeFileSync(match[1], JSON.stringify(manifest));
+        fs.writeFileSync(match[1].trim(), JSON.stringify(manifest));
       }
     });
   }
@@ -232,9 +239,11 @@ describe("runAgent", () => {
   it('uses readonly tools for type "readonly"', async () => {
     mockSessionWritesManifest(validManifest());
 
-    await runAgent(agent({ type: "readonly" }), "task", "ctx", config());
+    // Must add write tool since readonly doesn't include it
+    await runAgent(agent({ type: "readonly", enabledTools: ["read", "write"] }), "task", "ctx", config());
 
-    expect(mockCreateReadOnlyTools).toHaveBeenCalled();
+    expect(mockCreateReadTool).toHaveBeenCalled();
+    expect(mockCreateWriteTool).toHaveBeenCalled();
   });
 
   it('uses all tools for type "all"', async () => {
@@ -252,10 +261,12 @@ describe("runAgent", () => {
     expect(mockCreateLsTool).toHaveBeenCalled();
   });
 
-  it('uses no tools for type "none"', async () => {
+  it('throws for type "none" without write tool', async () => {
     mockSessionWritesManifest(validManifest());
 
-    await runAgent(agent({ type: "none" }), "task", "ctx", config());
+    await expect(
+      runAgent(agent({ type: "none" }), "task", "ctx", config())
+    ).rejects.toThrow(/must have the "write" tool/);
 
     expect(mockCreateCodingTools).not.toHaveBeenCalled();
     expect(mockCreateReadOnlyTools).not.toHaveBeenCalled();
@@ -267,7 +278,7 @@ describe("runAgent", () => {
     mockSessionWritesManifest(validManifest());
 
     await runAgent(
-      agent({ enabledTools: ["read", "bash"] }),
+      agent({ enabledTools: ["read", "bash", "write"] }),
       "task",
       "ctx",
       config(),
@@ -275,6 +286,7 @@ describe("runAgent", () => {
 
     expect(mockCreateReadTool).toHaveBeenCalled();
     expect(mockCreateBashTool).toHaveBeenCalled();
+    expect(mockCreateWriteTool).toHaveBeenCalled();
     expect(mockCreateEditTool).not.toHaveBeenCalled();
     expect(mockCreateCodingTools).not.toHaveBeenCalled();
   });
@@ -283,13 +295,14 @@ describe("runAgent", () => {
     mockSessionWritesManifest(validManifest());
 
     await runAgent(
-      agent({ type: "all", enabledTools: ["read"] }),
+      agent({ type: "all", enabledTools: ["read", "write"] }),
       "task",
       "ctx",
       config(),
     );
 
     expect(mockCreateReadTool).toHaveBeenCalled();
+    expect(mockCreateWriteTool).toHaveBeenCalled();
     expect(mockCreateBashTool).not.toHaveBeenCalled();
   });
 
@@ -316,7 +329,7 @@ describe("runAgent", () => {
 
   it("throws when manifest has invalid changedFiles", async () => {
     mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
-      const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
       if (match) {
         fs.writeFileSync(
           match[1],
@@ -336,7 +349,7 @@ describe("runAgent", () => {
 
   it("throws when manifest has non-string summary", async () => {
     mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
-      const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
       if (match) {
         fs.writeFileSync(
           match[1],
@@ -356,7 +369,7 @@ describe("runAgent", () => {
 
   it("throws when manifest has invalid exports", async () => {
     mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
-      const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
       if (match) {
         fs.writeFileSync(
           match[1],
@@ -376,7 +389,7 @@ describe("runAgent", () => {
 
   it("throws when exports contains non-string value", async () => {
     mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
-      const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
       if (match) {
         fs.writeFileSync(
           match[1],
@@ -396,9 +409,9 @@ describe("runAgent", () => {
 
   it("throws when manifest is not valid JSON", async () => {
     mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
-      const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
       if (match) {
-        fs.writeFileSync(match[1], "NOT JSON {{{");
+        fs.writeFileSync(match[1].trim(), "NOT JSON {{{");
       }
     });
 
@@ -409,7 +422,7 @@ describe("runAgent", () => {
 
   it("throws when exports is an array instead of object", async () => {
     mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
-      const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
       if (match) {
         fs.writeFileSync(
           match[1],
@@ -429,7 +442,7 @@ describe("runAgent", () => {
 
   it("throws when exports is null", async () => {
     mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
-      const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
       if (match) {
         fs.writeFileSync(
           match[1],
@@ -449,7 +462,7 @@ describe("runAgent", () => {
 
   it("throws when changedFiles contains non-string elements", async () => {
     mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
-      const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
       if (match) {
         fs.writeFileSync(
           match[1],
@@ -529,9 +542,9 @@ describe("runAgent", () => {
         // Emit events during prompt execution
         for (const e of events) mockSession._emit(e);
 
-        const match = taskPrompt.match(/Write valid JSON.*?to: (.+)/);
+        const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
         if (match) {
-          fs.writeFileSync(match[1], JSON.stringify(manifest));
+          fs.writeFileSync(match[1].trim(), JSON.stringify(manifest));
         }
       });
     }
