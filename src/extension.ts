@@ -169,6 +169,33 @@ function buildProgressHandler(onUpdate?: (result: any) => void) {
   return { onProgress, lines };
 }
 
+// ── Agent name collection (includes sub-agents) ───────────
+
+function collectAgentNames(agents: AgentDefinitionConfig[]): string[] {
+  const names: string[] = [];
+  for (const agent of agents) {
+    names.push(agent.name);
+    if (agent.subAgents) {
+      names.push(...collectAgentNames(agent.subAgents));
+    }
+  }
+  return names;
+}
+
+function findAgentByName(
+  agents: AgentDefinitionConfig[],
+  name: string,
+): AgentDefinitionConfig | undefined {
+  for (const agent of agents) {
+    if (agent.name === name) return agent;
+    if (agent.subAgents) {
+      const found = findAgentByName(agent.subAgents, name);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
 // ── Extension ──────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
@@ -345,13 +372,11 @@ export default function (pi: ExtensionAPI) {
     }),
 
     async execute(toolCallId, params, signal, onUpdate, ctx) {
-      // Resolve agent definition: config lookup + inline overrides
-      const configAgent = projectConfig?.agents.find(
-        (a) => a.name === params.name,
-      );
+      // Resolve agent definition: config lookup + inline overrides (recursive search)
+      const configAgent = findAgentByName(projectConfig?.agents ?? [], params.name);
 
       if (!configAgent && !params.role) {
-        const available = projectConfig?.agents.map((a) => a.name).join(", ") ?? "(none)";
+        const available = collectAgentNames(projectConfig?.agents ?? []).join(", ") || "(none)";
         throw new Error(
           `Agent "${params.name}" not found in config. Available: ${available}. ` +
           "Provide role + rules to define one inline.",
@@ -440,7 +465,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("orchestrate", {
     description:
-      "Run the agent pipeline from .pi/settings.json with the given task",
+      "Run the agent pipeline or a single agent. Usage: /orchestrate [agent-name] <task>",
     handler: async (args, ctx) => {
       if (!projectConfig) {
         ctx.ui.notify(
@@ -450,16 +475,33 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      const task = args?.trim();
-      if (!task) {
-        ctx.ui.notify("Usage: /orchestrate <task description>", "warning");
+      const trimmed = args?.trim() ?? "";
+      if (!trimmed) {
+        const names = projectConfig.agents.map((a) => a.name).join(", ");
+        ctx.ui.notify(
+          `Usage:\n  /orchestrate <task>              — run full pipeline\n  /orchestrate <agent-name> <task> — run a single agent\n\nAvailable agents: ${names}`,
+          "warning",
+        );
         return;
       }
 
-      pi.sendUserMessage(
-        `Run the orchestrate tool with this task: ${task}`,
-        { deliverAs: "followUp" },
-      );
+      const spaceIdx = trimmed.indexOf(" ");
+      const firstWord = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
+      const allAgentNames = collectAgentNames(projectConfig.agents);
+      const matchedAgent = allAgentNames.find((n) => n === firstWord);
+
+      if (matchedAgent && spaceIdx !== -1) {
+        const task = trimmed.slice(spaceIdx + 1).trim();
+        pi.sendUserMessage(
+          `Run the run_agent tool with name="${matchedAgent}" and this task: ${task}`,
+          { deliverAs: "followUp" },
+        );
+      } else {
+        pi.sendUserMessage(
+          `Run the orchestrate tool with this task: ${trimmed}`,
+          { deliverAs: "followUp" },
+        );
+      }
     },
   });
 
@@ -480,7 +522,7 @@ export default function (pi: ExtensionAPI) {
       const trimmed = args?.trim() ?? "";
       const spaceIdx = trimmed.indexOf(" ");
       if (!trimmed || spaceIdx === -1) {
-        const names = projectConfig.agents.map((a) => a.name).join(", ");
+        const names = collectAgentNames(projectConfig.agents).join(", ");
         ctx.ui.notify(
           `Usage: /agent <name> <task>\nAvailable: ${names}`,
           "warning",
@@ -491,9 +533,9 @@ export default function (pi: ExtensionAPI) {
       const name = trimmed.slice(0, spaceIdx);
       const task = trimmed.slice(spaceIdx + 1).trim();
 
-      const agent = projectConfig.agents.find((a) => a.name === name);
+      const agent = findAgentByName(projectConfig.agents, name);
       if (!agent) {
-        const names = projectConfig.agents.map((a) => a.name).join(", ");
+        const names = collectAgentNames(projectConfig.agents).join(", ");
         ctx.ui.notify(
           `Agent "${name}" not found. Available: ${names}`,
           "error",
