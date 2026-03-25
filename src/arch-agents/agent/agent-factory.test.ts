@@ -319,12 +319,16 @@ describe("runAgent", () => {
 
   // ── Manifest parsing errors ──────────────────────────────
 
-  it("throws when manifest file is not written", async () => {
+  it("returns no-op manifest when manifest file is not written", async () => {
     mockSession.prompt.mockResolvedValue(undefined);
 
-    await expect(
-      runAgent(agent(), "task", "ctx", config()),
-    ).rejects.toThrow(/did not write manifest file/);
+    const result = await runAgent(agent(), "task", "ctx", config());
+    expect(result).toEqual({
+      agent: "test-agent",
+      changedFiles: [],
+      summary: "(no changes needed)",
+      exports: {},
+    });
   });
 
   it("throws when manifest has invalid changedFiles", async () => {

@@ -293,7 +293,13 @@ export async function runAgent(
   }
 
   if (!fs.existsSync(manifestPath)) {
-    throw new Error(`Agent "${def.name}" did not write manifest file: ${manifestPath}`);
+    // Agent had nothing to do — return a no-op manifest instead of failing the wave
+    return {
+      agent: def.name,
+      changedFiles: [],
+      summary: "(no changes needed)",
+      exports: {},
+    };
   }
 
   const manifestRaw = fs.readFileSync(manifestPath, "utf8");
