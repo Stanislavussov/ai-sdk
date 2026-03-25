@@ -143,27 +143,37 @@ function buildProgressHandler(onUpdate?: (result: any) => void) {
   const lines: string[] = [];
 
   const onProgress = (event: ProgressEvent): void => {
+    let logLine: string | undefined;
+
     switch (event.type) {
       case "wave_start":
-        lines.push(`→ Wave ${event.wave}: [${event.agents.join(", ")}]`);
+        logLine = `→ Wave ${event.wave}: [${event.agents.join(", ")}]`;
         break;
       case "agent_start":
-        lines.push(`  ▶ ${event.agent} starting (${event.model})`);
+        logLine = `  ▶ ${event.agent} starting (${event.model})`;
+        break;
+      case "agent_activity":
+        logLine = `  ⋯ ${event.agent}: ${event.message}`;
         break;
       case "agent_done":
-        lines.push(`  ✓ ${event.agent}: ${event.manifest.summary}`);
+        logLine = `  ✓ ${event.agent}: ${event.manifest.summary}`;
         break;
       case "agent_error":
-        lines.push(`  ✗ ${event.agent}: ${event.error.message}`);
+        logLine = `  ✗ ${event.agent}: ${event.error.message}`;
         break;
       case "orchestrator_done":
-        lines.push(`✓ Orchestration complete — ${event.manifests.length} agents finished`);
+        logLine = `✓ Orchestration complete — ${event.manifests.length} agents finished`;
         break;
     }
-    onUpdate?.({
-      content: [{ type: "text", text: lines.join("\n") }],
-      details: {},
-    });
+
+    if (logLine) {
+      lines.push(logLine);
+      console.log(logLine);
+      onUpdate?.({
+        content: [{ type: "text", text: lines.join("\n") }],
+        details: {},
+      });
+    }
   };
 
   return { onProgress, lines };
@@ -421,12 +431,15 @@ export default function (pi: ExtensionAPI) {
         details: {},
       });
 
+      const { onProgress } = buildProgressHandler(onUpdate);
+
       const agentConfig: OrchestratorConfig = {
         agents: [agentDef],
         model,
         thinkingLevel: projectConfig?.thinkingLevel,
         cwd: ctx.cwd,
         manifestDir: projectConfig?.manifestDir,
+        onProgress,
       };
 
       let manifest: AgentManifest;
