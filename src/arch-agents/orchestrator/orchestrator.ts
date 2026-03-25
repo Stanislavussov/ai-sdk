@@ -17,8 +17,11 @@ export class Orchestrator {
     task: string,
     parentContext: string | undefined,
     namePrefix?: string,
+    /** All agents in this pipeline level — used for sibling boundary awareness */
+    allSiblings?: AgentDefinition[],
   ): Promise<AgentManifest[]> {
     const pipelineAgents = agents.filter((a) => !a.standalone);
+    const siblings = allSiblings ?? pipelineAgents;
     const graph = buildDependencyGraph(pipelineAgents);
     const bus = new ManifestBus();
     const allManifests: AgentManifest[] = [];
@@ -64,7 +67,7 @@ export class Orchestrator {
             if (def.subAgents && def.subAgents.length > 0) {
               manifest = await this.runCompositeAgent(def, task, context, qualifiedName);
             } else {
-              manifest = await this.runLeafAgent(def, task, context, namePrefix);
+              manifest = await this.runLeafAgent(def, task, context, namePrefix, siblings);
             }
 
             bus.set(manifest);
@@ -108,13 +111,14 @@ export class Orchestrator {
     task: string,
     context: string,
     namePrefix?: string,
+    siblings?: AgentDefinition[],
   ): Promise<AgentManifest> {
     // Wrap onProgress to qualify agent names for sub-agents
     const config = namePrefix
       ? this.configWithQualifiedProgress(namePrefix)
       : this.config;
 
-    return runAgent(def, task, context, config);
+    return runAgent(def, task, context, config, siblings);
   }
 
   // ── Composite agent: runs sub-agents as a mini-pipeline ──
@@ -137,6 +141,7 @@ export class Orchestrator {
       task,
       parentContext,
       qualifiedParentName,
+      subAgents,
     );
 
     // Merge all sub-agent manifests into one composite manifest

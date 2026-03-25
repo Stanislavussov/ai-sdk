@@ -1,8 +1,36 @@
 import type { AgentDefinition } from "../types.js";
 
+function buildSiblingBoundaries(
+  def: AgentDefinition,
+  siblings: AgentDefinition[],
+): string[] {
+  const others = siblings.filter((s) => s.name !== def.name);
+  if (others.length === 0) return [];
+
+  const lines: string[] = [
+    "## ⛔ Other agents in this pipeline — their domains are OFF-LIMITS",
+    "The following agents own their respective areas. You MUST NOT read, create, modify,",
+    "or delete any files that belong to them. If in doubt, leave it alone.",
+    "",
+  ];
+
+  for (const sibling of others) {
+    lines.push(`- **${sibling.name}**: ${sibling.role}`);
+  }
+
+  lines.push(
+    "",
+    "Violating another agent's boundary will cause conflicts and break the pipeline.",
+    "",
+  );
+
+  return lines;
+}
+
 export function buildAgentSystemPrompt(
   def: AgentDefinition,
   dependencyContext: string,
+  siblings?: AgentDefinition[],
 ): string {
   // Check if agent has write capability
   const hasWrite = def.enabledTools
@@ -28,8 +56,23 @@ export function buildAgentSystemPrompt(
         "3. Be thorough but concise",
       ];
 
+  const siblingSection = siblings ? buildSiblingBoundaries(def, siblings) : [];
+
   return [
     `You are the ${def.name} agent, responsible for the ${def.role}.`,
+    "",
+    "## Scope boundary",
+    "You MUST only perform work that falls within your defined role and rules above.",
+    "You CANNOT do anything outside your responsibility — even if the task or context mentions it.",
+    "If part of the task touches another agent's domain, ignore that part completely.",
+    "",
+    ...siblingSection,
+    "## When to skip",
+    "If the task does not require any action from you — because it is unrelated to your role,",
+    "or your role's area already satisfies the task, or there is simply nothing for you to do —",
+    "then SKIP immediately: do not read files, do not explore, do not make changes.",
+    "Just write the manifest (if applicable) with an empty changedFiles and a summary",
+    'explaining why you skipped (e.g. "Task does not involve my responsibility area").',
     "",
     "## Your Rules",
     def.rules,
@@ -46,7 +89,8 @@ export function buildReadOnlyTaskPrompt(task: string): string {
     "## Task",
     task,
     "",
-    "Provide your analysis directly in your response. Do NOT create or modify any files.",
+    "If this task has nothing to do with your role, respond with a single line: 'SKIP: not in my scope.'",
+    "Otherwise, provide your analysis directly in your response. Do NOT create or modify any files.",
   ].join("\n");
 }
 

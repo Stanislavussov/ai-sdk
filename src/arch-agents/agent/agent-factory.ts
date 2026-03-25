@@ -193,6 +193,7 @@ export async function runAgent(
   task: string,
   dependencyContext: string,
   config: OrchestratorConfig,
+  siblings?: AgentDefinition[],
 ): Promise<AgentManifest> {
   const cwd = config.cwd ? path.resolve(config.cwd) : process.cwd();
   const manifestDir = config.manifestDir
@@ -211,7 +212,7 @@ export async function runAgent(
   const model = resolveModel(def.model ?? config.model, modelRegistry);
 
   const agentSkills = buildAgentSkills(def.skills, cwd);
-  const systemPrompt = buildAgentSystemPrompt(def, dependencyContext);
+  const systemPrompt = buildAgentSystemPrompt(def, dependencyContext, siblings);
 
   const loader = new DefaultResourceLoader({
     cwd,

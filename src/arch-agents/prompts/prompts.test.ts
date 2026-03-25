@@ -57,6 +57,34 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("Rule 2: Do Y");
     expect(prompt).toContain("Rule 3: Do Z");
   });
+
+  it("includes sibling boundaries when siblings are provided", () => {
+    const siblings: AgentDefinition[] = [
+      { name: "i18n", role: "Internationalization. Works in packages/core/src/i18n/", rules: "" },
+      { name: "translation", role: "Translates words. Works in packages/core/src/translation/", rules: "" },
+      { name: "validation", role: "Validates AI responses. Works in packages/core/src/validation/", rules: "" },
+    ];
+    const prompt = buildAgentSystemPrompt(siblings[0], "", siblings);
+
+    // Should list the OTHER agents, not itself
+    expect(prompt).toContain("**translation**");
+    expect(prompt).toContain("**validation**");
+    expect(prompt).not.toContain("**i18n**");
+
+    // Should contain the off-limits header
+    expect(prompt).toContain("OFF-LIMITS");
+  });
+
+  it("omits sibling section when no siblings provided", () => {
+    const prompt = buildAgentSystemPrompt(agent(), "ctx");
+    expect(prompt).not.toContain("OFF-LIMITS");
+  });
+
+  it("omits sibling section when agent is the only sibling", () => {
+    const def = agent();
+    const prompt = buildAgentSystemPrompt(def, "ctx", [def]);
+    expect(prompt).not.toContain("OFF-LIMITS");
+  });
 });
 
 describe("buildOrchestratorTaskPrompt", () => {

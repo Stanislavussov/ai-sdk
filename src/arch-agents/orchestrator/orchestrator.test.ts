@@ -53,6 +53,7 @@ describe("Orchestrator", () => {
       "Build stuff",
       expect.any(String),
       expect.any(Object),
+      expect.any(Array),
     );
   });
 
@@ -138,6 +139,7 @@ describe("Orchestrator", () => {
       "Task",
       expect.any(String),
       config,
+      expect.any(Array),
     );
   });
 
