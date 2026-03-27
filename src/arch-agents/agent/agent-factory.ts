@@ -93,14 +93,69 @@ function buildAgentSkills(skillDirs: string[] | undefined, cwd: string): Skill[]
   });
 }
 
+// ── Manifest JSON repair ──────────────────────────────────
+
+/**
+ * Attempt to extract valid JSON from raw LLM output.
+ *
+ * LLMs commonly produce:
+ * - JSON wrapped in markdown code fences (```json ... ```)
+ * - Trailing commas before `}` or `]`
+ * - Leading/trailing prose around the JSON object
+ *
+ * This function handles all of these before handing off to JSON.parse.
+ */
+export function repairManifestJson(raw: string): string {
+  let text = raw.trim();
+
+  // Strip markdown code fences: ```json ... ``` or ``` ... ```
+  const fenceMatch = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
+  if (fenceMatch) {
+    text = fenceMatch[1].trim();
+  }
+
+  // If the text doesn't start with `{`, try to find the first `{` ... last `}`
+  if (!text.startsWith("{")) {
+    const firstBrace = text.indexOf("{");
+    const lastBrace = text.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      text = text.slice(firstBrace, lastBrace + 1);
+    }
+  }
+
+  // Remove trailing commas before } or ]
+  text = text.replace(/,\s*([}\]])/g, "$1");
+
+  return text;
+}
+
 // ── Manifest parsing ───────────────────────────────────────
 
 function parseManifest(agent: string, raw: string): AgentManifest {
-  const parsed = JSON.parse(raw) as {
-    changedFiles?: unknown;
-    summary?: unknown;
-    exports?: unknown;
-  };
+  const repaired = repairManifestJson(raw);
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(repaired);
+  } catch {
+    throw new Error(
+      `Invalid manifest JSON for agent "${agent}": could not parse after repair. Raw content (first 200 chars): ${raw.slice(0, 200)}`,
+    );
+  }
+
+  // ── Lenient field recovery ──────────────────────────────
+  // Missing changedFiles → default to []
+  if (parsed.changedFiles === undefined || parsed.changedFiles === null) {
+    parsed.changedFiles = [];
+  }
+  // Missing summary → default to "(no summary)"
+  if (parsed.summary === undefined || parsed.summary === null) {
+    parsed.summary = "(no summary)";
+  }
+  // Missing exports → default to {}
+  if (parsed.exports === undefined || parsed.exports === null) {
+    parsed.exports = {};
+  }
 
   if (!Array.isArray(parsed.changedFiles) || !parsed.changedFiles.every((v) => typeof v === "string")) {
     throw new Error(`Invalid manifest for agent "${agent}": changedFiles must be string[]`);

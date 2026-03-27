@@ -63,6 +63,19 @@ export interface OrchestratorConfig {
   thinkingLevel?: ThinkingLevel;
   onProgress?: (event: ProgressEvent) => void;
   manifestDir?: string;
+  /**
+   * Maximum number of retries per agent before giving up.
+   * Uses exponential backoff: 2s, 4s, 8s, …
+   * @default 0 (no retries)
+   */
+  maxRetries?: number;
+  /**
+   * Maximum character length for the dependency context injected into
+   * each agent's system prompt. When the combined upstream context exceeds
+   * this limit, individual summaries are truncated to fit.
+   * @default undefined (no limit)
+   */
+  maxContextLength?: number;
 }
 
 export type ProgressEvent =
@@ -70,6 +83,7 @@ export type ProgressEvent =
   | { type: "agent_start"; agent: string; model: string }
   | { type: "agent_done"; agent: string; manifest: AgentManifest }
   | { type: "agent_error"; agent: string; error: Error }
+  | { type: "agent_retry"; agent: string; attempt: number; maxRetries: number; error: Error }
   | { type: "orchestrator_done"; manifests: AgentManifest[] }
   | {
       /**

@@ -445,6 +445,75 @@ describe("Orchestrator", () => {
     await expect(orch.run("Task")).resolves.toBeDefined();
   });
 
+  // ── Retry logic ─────────────────────────────────────────
+
+  it("retries a failed agent up to maxRetries times", async () => {
+    let attempts = 0;
+    mockRunAgent.mockImplementation(async (def: AgentDefinition) => {
+      attempts++;
+      if (attempts < 3) throw new Error("Transient failure");
+      return manifest(def.name);
+    });
+
+    const orch = new Orchestrator({
+      agents: [agent("a")],
+      model: TEST_MODEL,
+      maxRetries: 2,
+    });
+    const result = await orch.run("Task");
+
+    expect(result).toHaveLength(1);
+    expect(attempts).toBe(3); // 1 initial + 2 retries
+  });
+
+  it("throws after exhausting all retries", async () => {
+    mockRunAgent.mockRejectedValue(new Error("Persistent failure"));
+
+    const orch = new Orchestrator({
+      agents: [agent("a")],
+      model: TEST_MODEL,
+      maxRetries: 2,
+    });
+
+    await expect(orch.run("Task")).rejects.toThrow("Persistent failure");
+    expect(mockRunAgent).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
+  });
+
+  it("fires agent_retry progress events on each retry", async () => {
+    let attempts = 0;
+    mockRunAgent.mockImplementation(async (def: AgentDefinition) => {
+      attempts++;
+      if (attempts < 3) throw new Error("Retry me");
+      return manifest(def.name);
+    });
+
+    const events: ProgressEvent[] = [];
+    const orch = new Orchestrator({
+      agents: [agent("a")],
+      model: TEST_MODEL,
+      maxRetries: 2,
+      onProgress: (e) => events.push(e),
+    });
+    await orch.run("Task");
+
+    const retryEvents = events.filter((e) => e.type === "agent_retry");
+    expect(retryEvents).toHaveLength(2);
+    expect((retryEvents[0] as any).attempt).toBe(1);
+    expect((retryEvents[1] as any).attempt).toBe(2);
+  });
+
+  it("does not retry when maxRetries is 0 (default)", async () => {
+    mockRunAgent.mockRejectedValue(new Error("Fail"));
+
+    const orch = new Orchestrator({
+      agents: [agent("a")],
+      model: TEST_MODEL,
+    });
+
+    await expect(orch.run("Task")).rejects.toThrow("Fail");
+    expect(mockRunAgent).toHaveBeenCalledTimes(1);
+  });
+
   // ── Graph errors bubble up ───────────────────────────────
 
   it("throws on cyclic dependencies", async () => {

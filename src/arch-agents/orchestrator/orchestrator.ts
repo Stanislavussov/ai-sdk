@@ -51,7 +51,7 @@ export class Orchestrator {
                 agent: qualifiedName,
                 message: `📨 Receiving context from ${deps.join(", ")}`,
               });
-              const siblingContext = bus.getContext(deps);
+              const siblingContext = bus.getContext(deps, this.config.maxContextLength);
               context = parentContext
                 ? `${siblingContext}\n\n## Parent upstream context\n${parentContext}`
                 : siblingContext;
@@ -59,13 +59,40 @@ export class Orchestrator {
               context = parentContext ?? "You run first — no upstream context.";
             }
 
-            // Dispatch: composite (has subAgents) vs. leaf agent
+            // Dispatch: composite (has subAgents) vs. leaf agent — with retry
             let manifest: AgentManifest;
-            if (def.subAgents && def.subAgents.length > 0) {
-              manifest = await this.runCompositeAgent(def, task, context, qualifiedName);
-            } else {
-              manifest = await this.runLeafAgent(def, task, context, namePrefix);
+            const maxRetries = this.config.maxRetries ?? 0;
+            let lastError: Error | undefined;
+
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+              try {
+                if (def.subAgents && def.subAgents.length > 0) {
+                  manifest = await this.runCompositeAgent(def, task, context, qualifiedName);
+                } else {
+                  manifest = await this.runLeafAgent(def, task, context, namePrefix);
+                }
+                lastError = undefined;
+                break;
+              } catch (retryErr) {
+                lastError = retryErr instanceof Error ? retryErr : new Error(String(retryErr));
+                if (attempt < maxRetries) {
+                  const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s, …
+                  this.config.onProgress?.({
+                    type: "agent_retry",
+                    agent: qualifiedName,
+                    attempt: attempt + 1,
+                    maxRetries,
+                    error: lastError,
+                  });
+                  await new Promise((r) => setTimeout(r, delay));
+                }
+              }
             }
+
+            if (lastError) {
+              throw lastError;
+            }
+            manifest = manifest!;
 
             bus.set(manifest);
             this.config.onProgress?.({ type: "agent_done", agent: qualifiedName, manifest });

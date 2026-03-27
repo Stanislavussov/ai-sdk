@@ -96,7 +96,7 @@ vi.mock("../model/model-resolver.js", () => ({
 }));
 
 // Import after mocks
-import { runAgent } from "./agent-factory.js";
+import { runAgent, repairManifestJson } from "./agent-factory.js";
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -480,6 +480,99 @@ describe("runAgent", () => {
     ).rejects.toThrow(/changedFiles must be string\[\]/);
   });
 
+  // ── Manifest JSON repair (lenient parsing) ──────────────
+
+  it("parses manifest wrapped in markdown code fences", async () => {
+    mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
+      if (match) {
+        fs.writeFileSync(
+          match[1].trim(),
+          '```json\n{"changedFiles":["a.ts"],"summary":"ok","exports":{}}\n```',
+        );
+      }
+    });
+
+    const result = await runAgent(agent(), "task", "ctx", config());
+    expect(result.summary).toBe("ok");
+    expect(result.changedFiles).toEqual(["a.ts"]);
+  });
+
+  it("parses manifest with trailing commas", async () => {
+    mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
+      if (match) {
+        fs.writeFileSync(
+          match[1].trim(),
+          '{"changedFiles":["a.ts",],"summary":"ok","exports":{},}',
+        );
+      }
+    });
+
+    const result = await runAgent(agent(), "task", "ctx", config());
+    expect(result.summary).toBe("ok");
+  });
+
+  it("parses manifest with leading prose around JSON", async () => {
+    mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
+      if (match) {
+        fs.writeFileSync(
+          match[1].trim(),
+          'Here is the manifest:\n{"changedFiles":[],"summary":"done","exports":{}}\nDone!',
+        );
+      }
+    });
+
+    const result = await runAgent(agent(), "task", "ctx", config());
+    expect(result.summary).toBe("done");
+  });
+
+  it("defaults missing changedFiles to empty array", async () => {
+    mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
+      if (match) {
+        fs.writeFileSync(
+          match[1].trim(),
+          '{"summary":"ok","exports":{}}',
+        );
+      }
+    });
+
+    const result = await runAgent(agent(), "task", "ctx", config());
+    expect(result.changedFiles).toEqual([]);
+  });
+
+  it("defaults missing summary to fallback string", async () => {
+    mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
+      if (match) {
+        fs.writeFileSync(
+          match[1].trim(),
+          '{"changedFiles":[],"exports":{}}',
+        );
+      }
+    });
+
+    const result = await runAgent(agent(), "task", "ctx", config());
+    expect(result.summary).toBe("(no summary)");
+  });
+
+  it("defaults missing exports to empty object", async () => {
+    mockSession.prompt.mockImplementation(async (taskPrompt: string) => {
+      const match = taskPrompt.match(/(?:to create the file|to): ([^\n]+)/);
+      if (match) {
+        fs.writeFileSync(
+          match[1].trim(),
+          '{"changedFiles":["a.ts"],"summary":"ok"}',
+        );
+      }
+    });
+
+    const result = await runAgent(agent(), "task", "ctx", config());
+    expect(result.exports).toEqual({});
+  });
+
   // ── Model resolution ─────────────────────────────────────
 
   it("calls resolveModel with agent model", async () => {
@@ -841,5 +934,45 @@ describe("runAgent", () => {
         "📂 Listing directory",
       ]);
     });
+  });
+});
+
+// ── repairManifestJson unit tests ──────────────────────────
+
+describe("repairManifestJson", () => {
+  it("passes through valid JSON unchanged", () => {
+    const input = '{"changedFiles":[],"summary":"ok","exports":{}}';
+    const result = repairManifestJson(input);
+    expect(JSON.parse(result)).toEqual({ changedFiles: [], summary: "ok", exports: {} });
+  });
+
+  it("strips markdown code fences with json tag", () => {
+    const input = '```json\n{"summary":"ok"}\n```';
+    expect(JSON.parse(repairManifestJson(input))).toEqual({ summary: "ok" });
+  });
+
+  it("strips markdown code fences without language tag", () => {
+    const input = '```\n{"summary":"ok"}\n```';
+    expect(JSON.parse(repairManifestJson(input))).toEqual({ summary: "ok" });
+  });
+
+  it("removes trailing commas before } and ]", () => {
+    const input = '{"a":[1,2,],"b":"c",}';
+    expect(JSON.parse(repairManifestJson(input))).toEqual({ a: [1, 2], b: "c" });
+  });
+
+  it("extracts JSON from surrounding prose", () => {
+    const input = 'Here is the result:\n{"key":"value"}\nAll done.';
+    expect(JSON.parse(repairManifestJson(input))).toEqual({ key: "value" });
+  });
+
+  it("handles leading whitespace", () => {
+    const input = '   \n  {"x":1}  \n  ';
+    expect(JSON.parse(repairManifestJson(input))).toEqual({ x: 1 });
+  });
+
+  it("handles combined issues: fences + trailing commas", () => {
+    const input = '```json\n{"files":["a.ts",],"summary":"done",}\n```';
+    expect(JSON.parse(repairManifestJson(input))).toEqual({ files: ["a.ts"], summary: "done" });
   });
 });

@@ -147,5 +147,43 @@ describe("ManifestBus", () => {
         "Missing manifest for dependency agent: b",
       );
     });
+
+    // ── Context truncation ──────────────────────────────────
+
+    it("returns full context when under maxLength", () => {
+      const bus = new ManifestBus();
+      bus.set(manifest("a", { summary: "short" }));
+      const ctx = bus.getContext(["a"], 10000);
+      expect(ctx).toContain("short");
+      expect(ctx).not.toContain("...");
+    });
+
+    it("truncates summaries when context exceeds maxLength", () => {
+      const bus = new ManifestBus();
+      const longSummary = "x".repeat(5000);
+      bus.set(manifest("a", { summary: longSummary }));
+      const ctx = bus.getContext(["a"], 500);
+      expect(ctx.length).toBeLessThanOrEqual(600); // some overhead tolerance
+      expect(ctx).toContain("...");
+      expect(ctx).toContain("[a]");
+    });
+
+    it("truncates proportionally across multiple dependencies", () => {
+      const bus = new ManifestBus();
+      bus.set(manifest("a", { summary: "a".repeat(3000) }));
+      bus.set(manifest("b", { summary: "b".repeat(3000) }));
+      const ctx = bus.getContext(["a", "b"], 800);
+      expect(ctx).toContain("[a]");
+      expect(ctx).toContain("[b]");
+      expect(ctx).toContain("...");
+    });
+
+    it("does not truncate when maxLength is undefined", () => {
+      const bus = new ManifestBus();
+      const longSummary = "x".repeat(10000);
+      bus.set(manifest("a", { summary: longSummary }));
+      const ctx = bus.getContext(["a"]);
+      expect(ctx).toContain(longSummary);
+    });
   });
 });
