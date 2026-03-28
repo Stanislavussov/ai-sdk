@@ -148,4 +148,37 @@ describe("ManifestBus", () => {
       );
     });
   });
+
+  // ── getFullContext ───────────────────────────────────────
+
+  describe("getFullContext", () => {
+    it("returns no-upstream message when bus is empty", () => {
+      const bus = new ManifestBus();
+      expect(bus.getFullContext()).toBe("You run first — no upstream context.");
+    });
+
+    it("returns context from all stored manifests", () => {
+      const bus = new ManifestBus();
+      bus.set(manifest("researcher", { summary: "Found X" }));
+      bus.set(manifest("product-owner", { summary: "Prioritized Y" }));
+
+      const ctx = bus.getFullContext();
+      expect(ctx).toContain("[researcher]");
+      expect(ctx).toContain("Found X");
+      expect(ctx).toContain("[product-owner]");
+      expect(ctx).toContain("Prioritized Y");
+    });
+
+    it("includes all manifests regardless of dependsOn wiring", () => {
+      const bus = new ManifestBus();
+      bus.set(manifest("a", { summary: "A output" }));
+      bus.set(manifest("b", { summary: "B output" }));
+      bus.set(manifest("c", { summary: "C output" }));
+
+      const ctx = bus.getFullContext();
+      expect(ctx).toContain("[a]");
+      expect(ctx).toContain("[b]");
+      expect(ctx).toContain("[c]");
+    });
+  });
 });

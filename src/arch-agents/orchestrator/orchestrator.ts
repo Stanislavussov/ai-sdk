@@ -46,18 +46,23 @@ export class Orchestrator {
           try {
             const deps = def.dependsOn ?? [];
 
-            // Build context: sibling dependencies + parent upstream context
+            // Build context: ALL accumulated manifests + parent upstream context.
+            // dependsOn controls scheduling (wave order) only — every agent
+            // sees the full knowledge bus so no upstream reasoning is lost.
             let context: string;
-            if (deps.length > 0) {
+            const fullContext = bus.getFullContext();
+            const hasUpstream = bus.all().length > 0;
+
+            if (hasUpstream) {
+              const upstreamNames = bus.all().map((m) => m.agent);
               this.config.onProgress?.({
                 type: "agent_activity",
                 agent: qualifiedName,
-                message: `📨 Receiving context from ${deps.join(", ")}`,
+                message: `📨 Receiving context from ${upstreamNames.join(", ")}`,
               });
-              const siblingContext = bus.getContext(deps);
               context = parentContext
-                ? `${siblingContext}\n\n## Parent upstream context\n${parentContext}`
-                : siblingContext;
+                ? `${fullContext}\n\n## Parent upstream context\n${parentContext}`
+                : fullContext;
             } else {
               context = parentContext ?? "You run first — no upstream context.";
             }

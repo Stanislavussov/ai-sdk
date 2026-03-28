@@ -40,6 +40,19 @@ export class ManifestBus {
     return blocks.join("\n\n");
   }
 
+  /**
+   * Returns context from ALL previously completed agents.
+   * Use this instead of getContext() so every agent sees the full
+   * accumulated knowledge, not just its direct dependencies.
+   */
+  getFullContext(): string {
+    if (this.store.size === 0) {
+      return "You run first — no upstream context.";
+    }
+
+    return this.getContext(Array.from(this.store.keys()));
+  }
+
   all(): AgentManifest[] {
     return Array.from(this.store.values());
   }
