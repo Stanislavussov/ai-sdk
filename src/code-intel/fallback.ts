@@ -187,12 +187,15 @@ export function grepReferences(
   exact: boolean,
   log?: pino.Logger,
 ): ReferenceResult {
-  sdkLog.info("FALLBACK", `grepReferences called`, { symbol, scope, exact, hasRg: hasRipgrep() });
+  // Note: grepReferences is the PRIMARY implementation for find_references
+  // (not a fallback). Cross-file search inherently requires grep/rg.
+  // We log under CODE-INTEL, not FALLBACK.
+  sdkLog.info("CODE-INTEL", `grepReferences called`, { symbol, scope, exact, hasRg: hasRipgrep() });
 
   const result: ReferenceResult = {
     symbol,
     references: [],
-    fallback: true,
+    fallback: false,
   };
 
   const absScope = path.resolve(cwd, scope);
@@ -215,14 +218,14 @@ export function grepReferences(
         "-e", JSON.stringify(pattern), // quote the pattern safely
         JSON.stringify(absScope),
       ].join(" ");
-      sdkLog.debug("FALLBACK", `Running ripgrep command`, { cmd });
-      output = safeExec(cmd, cwd, log);
+      sdkLog.debug("CODE-INTEL", `Running ripgrep command`, { cmd });
+      output = safeExec(cmd, cwd, log, "CODE-INTEL");
     } else {
       // GNU grep fallback
       const includeFlags = "--include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.mts' --include='*.cts' --include='*.mjs' --include='*.cjs'";
       const cmd = `grep -rn ${includeFlags} -E ${JSON.stringify(pattern)} ${JSON.stringify(absScope)} | head -${MAX_GREP_RESULTS}`;
-      sdkLog.debug("FALLBACK", `Running grep command`, { cmd });
-      output = safeExec(cmd, cwd, log);
+      sdkLog.debug("CODE-INTEL", `Running grep command`, { cmd });
+      output = safeExec(cmd, cwd, log, "CODE-INTEL");
     }
 
     if (!output.trim()) {
@@ -256,8 +259,8 @@ export function grepReferences(
 
 // ── Shared helpers ─────────────────────────────────────────
 
-function safeExec(cmd: string, cwd: string, log?: pino.Logger): string {
-  sdkLog.debug("FALLBACK", `safeExec: executing`, { cmd: cmd.slice(0, 300), cwd });
+function safeExec(cmd: string, cwd: string, log?: pino.Logger, logTag: string = "FALLBACK"): string {
+  sdkLog.debug(logTag, `safeExec: executing`, { cmd: cmd.slice(0, 300), cwd });
   try {
     const output = execSync(cmd, {
       cwd,
@@ -267,15 +270,15 @@ function safeExec(cmd: string, cwd: string, log?: pino.Logger): string {
       stdio: ["pipe", "pipe", "pipe"],
     });
     const lines = output.split("\n").filter(Boolean).length;
-    sdkLog.debug("FALLBACK", `safeExec: success`, { outputLines: lines, outputLength: output.length });
+    sdkLog.debug(logTag, `safeExec: success`, { outputLines: lines, outputLength: output.length });
     return output;
   } catch (err: any) {
     // grep returns exit code 1 when no matches — that's not an error
     if (err.status === 1 && (err.stdout || err.stdout === "")) {
-      sdkLog.debug("FALLBACK", `safeExec: no matches (exit code 1)`, { cmd: cmd.slice(0, 200) });
+      sdkLog.debug(logTag, `safeExec: no matches (exit code 1)`, { cmd: cmd.slice(0, 200) });
       return err.stdout ?? "";
     }
-    sdkLog.warn("FALLBACK", `safeExec: command failed`, { cmd: cmd.slice(0, 200), error: err.message, exitCode: err.status });
+    sdkLog.warn(logTag, `safeExec: command failed`, { cmd: cmd.slice(0, 200), error: err.message, exitCode: err.status });
     log?.warn({ cmd, err: err.message }, "Shell command failed");
     return "";
   }

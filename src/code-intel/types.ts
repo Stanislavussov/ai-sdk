@@ -141,8 +141,8 @@ export interface Reference {
 export interface ReferenceResult {
   symbol: string;
   references: Reference[];
-  /** True when the result came from grep/rg fallback */
-  fallback: boolean;
+  /** True when the result came from a fallback path (e.g. parser failure). False/undefined for primary grep-based search. */
+  fallback?: boolean;
   error?: string;
 }
 

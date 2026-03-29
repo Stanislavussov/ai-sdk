@@ -765,7 +765,7 @@ describe("fallback", () => {
       tmpFile("src/index.ts", 'import { Foo } from "./types";\nconst x: Foo = { bar: "hi" };');
 
       const result = grepReferences("Foo", ".", tmpDir, true, log);
-      expect(result.fallback).toBe(true);
+      expect(result.fallback).toBe(false); // grep/rg is the primary implementation, not a fallback
       expect(result.references.length).toBeGreaterThanOrEqual(2);
     });
 

@@ -268,9 +268,10 @@ export async function executeFindReferences(
     return errorResult(`Path not found: ${scope}. Check the path and try again.`);
   }
 
-  // For find_references, we go straight to grep/rg since cross-file
-  // analysis requires project-wide search — the structural parser is per-file.
-  // But we enrich the results with classification (definition/import/usage).
+  // For find_references, grep/rg IS the primary implementation (not a fallback)
+  // since cross-file analysis requires project-wide search — the structural
+  // parser is per-file only. Results are enriched with classification
+  // (definition/import/usage) via heuristic line analysis.
   try {
     const result = grepReferences(symbol, scope, cwd, exact, log);
 
@@ -281,7 +282,7 @@ export async function executeFindReferences(
     if (result.references.length === 0) {
       return {
         content: [{ type: "text", text: `No references to "${symbol}" found in ${scope}` }],
-        details: { result, fallback: true },
+        details: { result: { ...result, fallback: false }, fallback: false },
       };
     }
 
@@ -307,7 +308,7 @@ export async function executeFindReferences(
 
     return {
       content: [{ type: "text", text }],
-      details: { result: { ...result, references: refs }, fallback: true },
+      details: { result: { ...result, references: refs, fallback: false }, fallback: false },
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
