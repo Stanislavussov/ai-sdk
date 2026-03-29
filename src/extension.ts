@@ -5,6 +5,7 @@ import { Type, type TObject, type TOptional, type TArray } from "@sinclair/typeb
 import { createOrchestrator } from "./arch-agents/index.js";
 import { runAgent } from "./arch-agents/agent/agent-factory.js";
 import type { AgentDefinition, AgentManifest, AgentType, OrchestratorConfig, ProgressEvent } from "./arch-agents/types.js";
+import { registerCodeIntelTools } from "./code-intel/index.js";
 
 // ── Inline agent definition schema (recursive for subAgents) ──
 
@@ -627,4 +628,7 @@ export default function (pi: ExtensionAPI) {
       );
     },
   });
+
+  // ── Code intelligence tools ──
+  registerCodeIntelTools(pi);
 }

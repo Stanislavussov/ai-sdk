@@ -18,6 +18,7 @@ vi.mock("@sinclair/typebox", () => ({
     Object: (schema: any) => schema,
     String: (opts?: any) => ({ type: "string", ...opts }),
     Boolean: (opts?: any) => ({ type: "boolean", ...opts }),
+    Number: (opts?: any) => ({ type: "number", ...opts }),
     Optional: (inner: any) => ({ ...inner, optional: true }),
     Array: (inner: any, opts?: any) => ({ type: "array", items: inner, ...opts }),
   },
@@ -31,6 +32,11 @@ vi.mock("./arch-agents/index.js", () => ({
 // ── Mock arch-agents/agent-factory.js ──────────────────────
 vi.mock("./arch-agents/agent/agent-factory.js", () => ({
   runAgent: mockRunAgent,
+}));
+
+// ── Mock code-intel (tested separately) ────────────────────
+vi.mock("./code-intel/index.js", () => ({
+  registerCodeIntelTools: vi.fn(),
 }));
 
 // ── Import the extension under test ────────────────────────

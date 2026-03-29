@@ -22,12 +22,16 @@
     "@mariozechner/pi-agent-core": "*",
     "@mariozechner/pi-ai": "*",
     "@mariozechner/pi-coding-agent": "*",
-    "@sinclair/typebox": "*"
+    "@sinclair/typebox": "*",
+    "typescript": ">=5.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "pino": "^10.3.1"
   }
 }
