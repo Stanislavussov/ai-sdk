@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type pino from "pino";
 import type { CodeMap, FileOutline, MapEntry, Reference, ReferenceKind, ReferenceResult } from "./types.js";
+import { log as sdkLog } from "../arch-agents/logger.js";
 
 // ── Tool detection ─────────────────────────────────────────
 
@@ -40,6 +41,7 @@ export function resetToolCache(): void {
  * Much less structured than the parser but always works.
  */
 export function grepOutline(filePath: string, cwd: string, log?: pino.Logger): FileOutline {
+  sdkLog.info("FALLBACK", `grepOutline called`, { filePath });
   const absPath = path.resolve(cwd, filePath);
   const outline: FileOutline = {
     path: filePath,
@@ -109,6 +111,7 @@ export function fallbackCodeMap(
   ignoreDirs: Set<string>,
   log?: pino.Logger,
 ): CodeMap {
+  sdkLog.info("FALLBACK", `fallbackCodeMap called`, { dirPath, maxDepth, ignoreDirs: [...ignoreDirs] });
   const absPath = path.resolve(cwd, dirPath);
   const result: CodeMap = {
     root: dirPath,
@@ -184,6 +187,8 @@ export function grepReferences(
   exact: boolean,
   log?: pino.Logger,
 ): ReferenceResult {
+  sdkLog.info("FALLBACK", `grepReferences called`, { symbol, scope, exact, hasRg: hasRipgrep() });
+
   const result: ReferenceResult = {
     symbol,
     references: [],
@@ -210,11 +215,13 @@ export function grepReferences(
         "-e", JSON.stringify(pattern), // quote the pattern safely
         JSON.stringify(absScope),
       ].join(" ");
+      sdkLog.debug("FALLBACK", `Running ripgrep command`, { cmd });
       output = safeExec(cmd, cwd, log);
     } else {
       // GNU grep fallback
       const includeFlags = "--include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.mts' --include='*.cts' --include='*.mjs' --include='*.cjs'";
       const cmd = `grep -rn ${includeFlags} -E ${JSON.stringify(pattern)} ${JSON.stringify(absScope)} | head -${MAX_GREP_RESULTS}`;
+      sdkLog.debug("FALLBACK", `Running grep command`, { cmd });
       output = safeExec(cmd, cwd, log);
     }
 
@@ -250,19 +257,25 @@ export function grepReferences(
 // ── Shared helpers ─────────────────────────────────────────
 
 function safeExec(cmd: string, cwd: string, log?: pino.Logger): string {
+  sdkLog.debug("FALLBACK", `safeExec: executing`, { cmd: cmd.slice(0, 300), cwd });
   try {
-    return execSync(cmd, {
+    const output = execSync(cmd, {
       cwd,
       encoding: "utf8",
       timeout: 15_000,
       maxBuffer: 2 * 1024 * 1024,
       stdio: ["pipe", "pipe", "pipe"],
     });
+    const lines = output.split("\n").filter(Boolean).length;
+    sdkLog.debug("FALLBACK", `safeExec: success`, { outputLines: lines, outputLength: output.length });
+    return output;
   } catch (err: any) {
     // grep returns exit code 1 when no matches — that's not an error
     if (err.status === 1 && (err.stdout || err.stdout === "")) {
+      sdkLog.debug("FALLBACK", `safeExec: no matches (exit code 1)`, { cmd: cmd.slice(0, 200) });
       return err.stdout ?? "";
     }
+    sdkLog.warn("FALLBACK", `safeExec: command failed`, { cmd: cmd.slice(0, 200), error: err.message, exitCode: err.status });
     log?.warn({ cmd, err: err.message }, "Shell command failed");
     return "";
   }

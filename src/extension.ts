@@ -6,6 +6,7 @@ import { createOrchestrator } from "./arch-agents/index.js";
 import { runAgent } from "./arch-agents/agent/agent-factory.js";
 import type { AgentDefinition, AgentManifest, AgentType, OrchestratorConfig, ProgressEvent } from "./arch-agents/types.js";
 import { registerCodeIntelTools } from "./code-intel/index.js";
+import { initLogger, log } from "./arch-agents/logger.js";
 
 // ── Inline agent definition schema (recursive for subAgents) ──
 
@@ -213,14 +214,25 @@ export default function (pi: ExtensionAPI) {
   let projectConfig: OrchestratorFileConfig | null = null;
 
   pi.on("session_start", async (_event, ctx) => {
+    initLogger(ctx.cwd, true);
+    log.info("EXT", "Session started", { cwd: ctx.cwd });
+
     projectConfig = loadConfig(ctx.cwd);
 
     if (projectConfig) {
       const names = projectConfig.agents.map((a) => a.name);
+      log.info("EXT", `Loaded config: ${names.length} agents`, {
+        agents: names,
+        model: projectConfig.model,
+        thinkingLevel: projectConfig.thinkingLevel ?? "default",
+        manifestDir: projectConfig.manifestDir ?? "(tmp)",
+      });
       ctx.ui.notify(
         `ai-sdk: loaded ${names.length} agents (${names.join(", ")})`,
         "info",
       );
+    } else {
+      log.warn("EXT", "No orchestrator config found in .pi/settings.json");
     }
   });
 
@@ -262,10 +274,17 @@ export default function (pi: ExtensionAPI) {
     }),
 
     async execute(toolCallId, params, signal, onUpdate, ctx) {
+      log.info("EXT", "═══ orchestrate tool called ═══", {
+        task: params.task,
+        modelOverride: params.model ?? "(none)",
+        inlineAgents: params.agents ? (params.agents as any[]).length : 0,
+      });
+
       const agents: AgentDefinition[] | undefined =
         (params.agents as AgentDefinition[] | undefined) ?? projectConfig?.agents;
 
       if (!agents || agents.length === 0) {
+        log.error("EXT", "No agents defined — aborting");
         throw new Error(
           "No agents defined. Add an \"orchestrator\" section to .pi/settings.json " +
           "or pass agents inline. See the ai-sdk README for the config schema.",
@@ -274,11 +293,17 @@ export default function (pi: ExtensionAPI) {
 
       const model = params.model ?? projectConfig?.model;
       if (!model) {
+        log.error("EXT", "No model specified — aborting");
         throw new Error(
           "No model specified. Set \"model\" in the orchestrator config in .pi/settings.json " +
           "or pass it as a parameter. Example: \"anthropic/claude-sonnet-4-5\".",
         );
       }
+
+      log.info("EXT", `Starting orchestration with ${agents.length} agents`, {
+        model,
+        agentNames: agents.map((a) => a.name),
+      });
 
       const { onProgress, lines } = buildProgressHandler(onUpdate);
 
@@ -293,6 +318,11 @@ export default function (pi: ExtensionAPI) {
 
       const app = createOrchestrator(config);
       const manifests = await app.run(params.task);
+
+      log.info("EXT", `═══ orchestration complete — ${manifests.length} manifests ═══`, {
+        agents: manifests.map((m) => m.agent),
+        totalChangedFiles: manifests.flatMap((m) => m.changedFiles).length,
+      });
 
       return {
         content: [
@@ -383,11 +413,32 @@ export default function (pi: ExtensionAPI) {
     }),
 
     async execute(toolCallId, params, signal, onUpdate, ctx) {
+      log.info("EXT", "═══ run_agent tool called ═══", {
+        name: params.name,
+        task: params.task,
+        modelOverride: params.model ?? "(none)",
+        hasContext: !!params.context,
+        hasInlineRole: !!params.role,
+        hasSubAgents: !!(params.subAgents as any)?.length,
+      });
+
       // Resolve agent definition: config lookup + inline overrides (recursive search)
       const configAgent = findAgentByName(projectConfig?.agents ?? [], params.name);
 
+      if (configAgent) {
+        log.debug("EXT", `Found agent "${params.name}" in config`, {
+          role: configAgent.role,
+          type: configAgent.type ?? "coding",
+          model: configAgent.model ?? "(default)",
+          dependsOn: configAgent.dependsOn ?? [],
+        });
+      } else {
+        log.debug("EXT", `Agent "${params.name}" not found in config — using inline definition`);
+      }
+
       if (!configAgent && !params.role) {
         const available = collectAgentNames(projectConfig?.agents ?? []).join(", ") || "(none)";
+        log.error("EXT", `Agent "${params.name}" not found and no inline role provided`);
         throw new Error(
           `Agent "${params.name}" not found in config. Available: ${available}. ` +
           "Provide role + rules to define one inline.",
@@ -407,11 +458,21 @@ export default function (pi: ExtensionAPI) {
         subAgents: (params.subAgents ?? configAgent?.subAgents) as AgentDefinition[] | undefined,
       };
 
+      log.debug("EXT", `Resolved agent definition for "${agentDef.name}"`, {
+        role: agentDef.role,
+        type: agentDef.type ?? "coding",
+        model: agentDef.model ?? "(will use default)",
+        enabledTools: agentDef.enabledTools ?? "(from type)",
+        skills: agentDef.skills ?? [],
+        subAgents: agentDef.subAgents?.map((s) => s.name) ?? [],
+      });
+
       const dependencyContext =
         params.context ?? "You are running standalone — no upstream context.";
 
       const model = params.model ?? configAgent?.model ?? projectConfig?.model;
       if (!model) {
+        log.error("EXT", "No model specified for run_agent — aborting");
         throw new Error(
           "No model specified. Set \"model\" in the orchestrator config in .pi/settings.json, " +
           "on the agent definition, or pass it as a parameter. Example: \"anthropic/claude-sonnet-4-5\".",
@@ -419,6 +480,8 @@ export default function (pi: ExtensionAPI) {
       }
 
       const isComposite = agentDef.subAgents && agentDef.subAgents.length > 0;
+
+      log.info("EXT", `Running ${isComposite ? "composite" : "leaf"} agent "${agentDef.name}"`, { model });
 
       onUpdate?.({
         content: [
@@ -445,13 +508,21 @@ export default function (pi: ExtensionAPI) {
 
       let manifest: AgentManifest;
       if (isComposite) {
+        log.debug("EXT", `Dispatching composite agent "${agentDef.name}" to orchestrator`);
         // Use orchestrator for composite agents so sub-agents are executed
         const app = createOrchestrator(agentConfig);
         const manifests = await app.run(params.task, dependencyContext);
         manifest = manifests[0];
       } else {
+        log.debug("EXT", `Dispatching leaf agent "${agentDef.name}" to runAgent`);
         manifest = await runAgent(agentDef, params.task, dependencyContext, agentConfig);
       }
+
+      log.info("EXT", `═══ run_agent complete: "${manifest.agent}" ═══`, {
+        summary: manifest.summary,
+        changedFiles: manifest.changedFiles,
+        exports: Object.keys(manifest.exports),
+      });
 
       return {
         content: [

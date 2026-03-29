@@ -13,6 +13,7 @@
 import type pino from "pino";
 import type { EntryKind, FileOutline, LanguageConfig, OutlineEntry } from "./types.js";
 import type { LanguageRegistry } from "./languages.js";
+import { log as sdkLog } from "../arch-agents/logger.js";
 
 // ── Dynamic TS import (graceful fallback if missing) ───────
 
@@ -81,21 +82,47 @@ export function parseFile(
   }
 
   try {
+    sdkLog.debug("PARSER", `Parsing "${filePath}"`, {
+      language,
+      parser: langConfig.parser,
+      contentLength: content.length,
+      lines: outline.lines,
+    });
+
+    let result: FileOutline;
     switch (langConfig.parser) {
       case "typescript":
-        return parseWithTypeScript(content, filePath, language, log);
+        sdkLog.debug("PARSER", `Using TypeScript compiler API for "${filePath}"`);
+        result = parseWithTypeScript(content, filePath, language, log);
+        sdkLog.debug("PARSER", `TypeScript parse done for "${filePath}"`, {
+          entries: result.entries.length,
+          exported: result.entries.filter((e) => e.exported).length,
+          imports: result.entries.filter((e) => e.kind === "import").length,
+          warnings: result.warnings?.length ?? 0,
+        });
+        return result;
       case "regex":
-        return parseWithRegex(content, filePath, language, langConfig, log);
+        sdkLog.debug("PARSER", `Using regex parser for "${filePath}"`, {
+          patterns: Object.keys(langConfig.patterns ?? {}),
+        });
+        result = parseWithRegex(content, filePath, language, langConfig, log);
+        sdkLog.debug("PARSER", `Regex parse done for "${filePath}"`, {
+          entries: result.entries.length,
+        });
+        return result;
       case "none":
+        sdkLog.debug("PARSER", `Parser "none" for "${filePath}" — skipping`);
         outline.warnings!.push(`Language "${language}" is configured with parser: "none"`);
         return outline;
       default:
+        sdkLog.warn("PARSER", `Unknown parser type "${langConfig.parser}" for "${filePath}"`);
         outline.warnings!.push(`Unknown parser type: "${langConfig.parser}"`);
         return outline;
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log?.error({ err, filePath }, `Parser crashed on ${filePath}`);
+    sdkLog.error("PARSER", `Parser crashed on "${filePath}"`, { error: msg });
     outline.warnings = outline.warnings ?? [];
     outline.warnings.push(`Parser error: ${msg}`);
     return outline;

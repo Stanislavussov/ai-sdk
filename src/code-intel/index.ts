@@ -17,6 +17,7 @@ import { createLogger } from "./logger.js";
 import { executeCodeMap, executeCodeOutline, executeFindReferences } from "./tools.js";
 import type { CodeIntelConfig } from "./types.js";
 import type pino from "pino";
+import { log as sdkLog } from "../arch-agents/logger.js";
 
 // ── Config loading ─────────────────────────────────────────
 
@@ -56,6 +57,13 @@ export function registerCodeIntelTools(pi: ExtensionAPI): void {
       { langCount, extCount, hasConfig: !!config },
       "code-intel: initialized",
     );
+    sdkLog.info("CODE-INTEL", `Initialized`, {
+      languages: langCount,
+      extensions: extCount,
+      hasConfig: !!config,
+      registeredLanguages: registry.all().map((l) => `${l.name} (${l.parser})`),
+      registeredExtensions: registry.allExtensions(),
+    });
   });
 
   // ── code_map ──

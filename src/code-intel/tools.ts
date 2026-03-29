@@ -17,6 +17,7 @@ import type { LanguageRegistry } from "./languages.js";
 import type { FileOutline, MapEntry, OutlineEntry, Reference, ToolResult } from "./types.js";
 import { parseFile, getFileSummary } from "./parser.js";
 import { grepOutline, grepReferences, fallbackCodeMap } from "./fallback.js";
+import { log as sdkLog } from "../arch-agents/logger.js";
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ export async function executeCodeMap(
   const absPath = path.resolve(cwd, targetPath);
 
   log.info({ targetPath, maxDepth, includeSummary }, "code_map: starting");
+  sdkLog.info("CODE-INTEL", `code_map called`, { targetPath, maxDepth, includeSummary, absPath });
 
   // Validate path exists
   if (!safeExists(absPath)) {
@@ -80,6 +82,7 @@ export async function executeCodeMap(
     const suffix = truncated ? `\n\n(Truncated at ${MAX_MAP_ENTRIES} entries. Use a narrower path or increase depth.)` : "";
 
     log.info({ targetPath, entryCount, truncated }, "code_map: complete");
+    sdkLog.info("CODE-INTEL", `code_map complete`, { targetPath, entryCount, truncated });
 
     return {
       content: [{ type: "text", text: `${targetPath}/ (${entryCount} items)\n\n${text}${suffix}` }],
@@ -88,6 +91,7 @@ export async function executeCodeMap(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.error({ err, targetPath }, "code_map: primary walk failed, trying fallback");
+    sdkLog.warn("CODE-INTEL", `code_map primary walk failed, falling back`, { targetPath, error: msg });
     return tryFallbackMap(targetPath, cwd, maxDepth, registry, log);
   }
 }
@@ -142,6 +146,7 @@ export async function executeCodeOutline(
   const absPath = path.resolve(cwd, filePath);
 
   log.info({ filePath }, "code_outline: starting");
+  sdkLog.info("CODE-INTEL", `code_outline called`, { filePath, absPath });
 
   // Validate
   if (!safeExists(absPath)) {
@@ -170,11 +175,22 @@ export async function executeCodeOutline(
 
   // Try structural parse
   try {
+    sdkLog.debug("CODE-INTEL", `code_outline: parsing file with structural parser`, { filePath, contentLength: content.length });
     const outline = parseFile(content, filePath, registry, log);
+
+    sdkLog.info("CODE-INTEL", `code_outline: parser result`, {
+      filePath,
+      language: outline.language,
+      parser: registry.resolve(filePath)?.parser ?? "none",
+      entries: outline.entries.length,
+      warnings: outline.warnings ?? [],
+      fallback: outline.fallback ?? false,
+    });
 
     if (outline.entries.length === 0 && !outline.warnings?.length) {
       // Empty file or no recognizable structure — try fallback
       log.info({ filePath }, "code_outline: parser returned nothing, trying fallback");
+      sdkLog.info("CODE-INTEL", `code_outline: parser returned nothing, trying grep fallback`, { filePath });
       return tryFallbackOutline(filePath, cwd, log);
     }
 
@@ -189,6 +205,7 @@ export async function executeCodeOutline(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.error({ err, filePath }, "code_outline: parser crashed, trying fallback");
+    sdkLog.error("CODE-INTEL", `code_outline: parser crashed, falling back to grep`, { filePath, error: msg });
     return tryFallbackOutline(filePath, cwd, log);
   }
 }
@@ -244,6 +261,7 @@ export async function executeFindReferences(
   }
 
   log.info({ symbol, scope, exact }, "find_references: starting");
+  sdkLog.info("CODE-INTEL", `find_references called`, { symbol, scope, exact });
 
   const absScope = path.resolve(cwd, scope);
   if (!safeExists(absScope)) {
@@ -274,6 +292,18 @@ export async function executeFindReferences(
     const text = formatReferences(symbol, refs, scope, truncated, result.references.length);
 
     log.info({ symbol, count: refs.length, truncated }, "find_references: complete");
+    sdkLog.info("CODE-INTEL", `find_references complete`, {
+      symbol,
+      total: result.references.length,
+      shown: refs.length,
+      truncated,
+      byKind: {
+        definitions: refs.filter((r) => r.kind === "definition").length,
+        imports: refs.filter((r) => r.kind === "import").length,
+        exports: refs.filter((r) => r.kind === "export").length,
+        usages: refs.filter((r) => r.kind === "usage").length,
+      },
+    });
 
     return {
       content: [{ type: "text", text }],
@@ -282,6 +312,7 @@ export async function executeFindReferences(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.error({ err, symbol }, "find_references: failed");
+    sdkLog.error("CODE-INTEL", `find_references failed`, { symbol, error: msg });
     return errorResult(`find_references failed: ${msg}. Use \`bash\` with \`grep -rn '${symbol}'\` as fallback.`);
   }
 }
