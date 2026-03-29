@@ -77,9 +77,9 @@ export function registerCodeIntelTools(pi: ExtensionAPI): void {
       "Use this to orient yourself in a codebase before diving into specific files.",
     promptSnippet: "Structural directory tree with file export summaries",
     promptGuidelines: [
-      "Use code_map to understand project structure before using read or grep.",
-      "Prefer code_map over ls or find when you need to understand what files contain.",
-      "Use code_outline for detailed view of a single file after code_map shows you what exists.",
+      "Use code_map when you need to understand a directory's structure and what files contain — it's a single call that replaces multiple ls + read round-trips.",
+      "If you already know which file or symbol you're looking for, use rg/grep or read directly — no need to code_map first.",
+      "Use code_outline to drill into a specific file's shape after code_map points you there.",
     ],
     parameters: Type.Object({
       path: Type.Optional(
@@ -109,9 +109,9 @@ export function registerCodeIntelTools(pi: ExtensionAPI): void {
       "from reading the whole file. Use this before `read` to know exactly where to look.",
     promptSnippet: "File structural skeleton: imports, exports, classes, functions, types",
     promptGuidelines: [
-      "Use code_outline before read to understand a file's structure without consuming tokens on the full content.",
-      "After code_outline, use read with offset/limit to zoom into the specific section you need.",
-      "code_outline works for .ts, .tsx, .js, .jsx files. Falls back to grep for others.",
+      "Use code_outline when you need a file's shape (exports, classes, function signatures) without reading the full content — saves tokens on large files.",
+      "Skip code_outline and use read directly when you need the actual implementation, not just signatures.",
+      "After code_outline, use read with offset/limit to jump to the exact section you need.",
     ],
     parameters: Type.Object({
       path: Type.String({ description: "File path relative to cwd" }),
@@ -133,9 +133,9 @@ export function registerCodeIntelTools(pi: ExtensionAPI): void {
       "grep for understanding how a symbol is used — distinguishes definition from usage.",
     promptSnippet: "Find all references to a symbol: definitions, imports, usages",
     promptGuidelines: [
-      "Use find_references instead of grep/rg when you need to understand how a specific symbol is used.",
-      "find_references classifies each match as definition, import, export, or usage.",
-      "Scope to a subdirectory with the path parameter to narrow results.",
+      "Use find_references when you need to understand how a symbol is used across the codebase — it classifies each match as definition, import, export, or usage.",
+      "Use rg/grep instead when you just need to locate a string or pattern quickly without classification.",
+      "Scope to a subdirectory with the path parameter to narrow results in large projects.",
     ],
     parameters: Type.Object({
       symbol: Type.String({ description: "Symbol name to search for" }),
