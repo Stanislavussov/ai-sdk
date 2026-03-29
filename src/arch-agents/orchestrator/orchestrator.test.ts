@@ -447,6 +447,160 @@ describe("Orchestrator", () => {
     await expect(orch.run("Task")).resolves.toBeDefined();
   });
 
+  // ── bus_snapshot events ────────────────────────────────────
+
+  describe("bus_snapshot", () => {
+    it("emits bus_snapshot after every agent completes", async () => {
+      mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+      const events: ProgressEvent[] = [];
+      const orch = new Orchestrator({
+        agents: [agent("a"), agent("b", ["a"]), agent("c", ["b"])],
+        model: TEST_MODEL,
+        onProgress: (e) => events.push(e),
+      });
+      await orch.run("Task");
+
+      const snapshots = events.filter((e) => e.type === "bus_snapshot");
+      expect(snapshots).toHaveLength(3);
+    });
+
+    it("each snapshot accumulates all previous manifests", async () => {
+      mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+      const events: ProgressEvent[] = [];
+      const orch = new Orchestrator({
+        agents: [agent("a"), agent("b", ["a"]), agent("c", ["b"])],
+        model: TEST_MODEL,
+        onProgress: (e) => events.push(e),
+      });
+      await orch.run("Task");
+
+      const snapshots = events.filter(
+        (e): e is Extract<ProgressEvent, { type: "bus_snapshot" }> => e.type === "bus_snapshot",
+      );
+
+      // After a: bus has [a]
+      expect(snapshots[0].afterAgent).toBe("a");
+      expect(snapshots[0].manifests).toHaveLength(1);
+      expect(snapshots[0].manifests[0].agent).toBe("a");
+
+      // After b: bus has [a, b]
+      expect(snapshots[1].afterAgent).toBe("b");
+      expect(snapshots[1].manifests).toHaveLength(2);
+      expect(snapshots[1].manifests.map((m) => m.agent)).toEqual(["a", "b"]);
+
+      // After c: bus has [a, b, c]
+      expect(snapshots[2].afterAgent).toBe("c");
+      expect(snapshots[2].manifests).toHaveLength(3);
+      expect(snapshots[2].manifests.map((m) => m.agent)).toEqual(["a", "b", "c"]);
+    });
+
+    it("contextForNext contains all previous agents summaries", async () => {
+      mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+      const events: ProgressEvent[] = [];
+      const orch = new Orchestrator({
+        agents: [agent("researcher"), agent("architect", ["researcher"])],
+        model: TEST_MODEL,
+        onProgress: (e) => events.push(e),
+      });
+      await orch.run("Task");
+
+      const snapshots = events.filter(
+        (e): e is Extract<ProgressEvent, { type: "bus_snapshot" }> => e.type === "bus_snapshot",
+      );
+
+      // After researcher: context has researcher's output
+      expect(snapshots[0].contextForNext).toContain("[researcher]");
+      expect(snapshots[0].contextForNext).toContain("researcher done");
+
+      // After architect: context has BOTH
+      expect(snapshots[1].contextForNext).toContain("[researcher]");
+      expect(snapshots[1].contextForNext).toContain("[architect]");
+    });
+
+    it("concurrent agents in the same wave all produce snapshots", async () => {
+      mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+      const events: ProgressEvent[] = [];
+      const orch = new Orchestrator({
+        agents: [agent("a"), agent("b"), agent("c")],
+        model: TEST_MODEL,
+        onProgress: (e) => events.push(e),
+      });
+      await orch.run("Task");
+
+      const snapshots = events.filter(
+        (e): e is Extract<ProgressEvent, { type: "bus_snapshot" }> => e.type === "bus_snapshot",
+      );
+
+      // All 3 agents should produce snapshots
+      expect(snapshots).toHaveLength(3);
+      // Last snapshot should have all 3
+      const lastSnap = snapshots[snapshots.length - 1];
+      expect(lastSnap.manifests).toHaveLength(3);
+    });
+
+    it("bus_snapshot fires after agent_done", async () => {
+      mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+      const events: ProgressEvent[] = [];
+      const orch = new Orchestrator({
+        agents: [agent("a")],
+        model: TEST_MODEL,
+        onProgress: (e) => events.push(e),
+      });
+      await orch.run("Task");
+
+      const doneIdx = events.findIndex((e) => e.type === "agent_done");
+      const snapIdx = events.findIndex((e) => e.type === "bus_snapshot");
+      expect(doneIdx).toBeLessThan(snapIdx);
+    });
+
+    it("sub-agent pipelines emit bus_snapshot with qualified names", async () => {
+      mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+      const events: ProgressEvent[] = [];
+      const orch = new Orchestrator({
+        agents: [
+          {
+            ...agent("parent"),
+            subAgents: [agent("child-a"), agent("child-b", ["child-a"])],
+          },
+        ],
+        model: TEST_MODEL,
+        onProgress: (e) => events.push(e),
+      });
+      await orch.run("Task");
+
+      const snapshots = events.filter(
+        (e): e is Extract<ProgressEvent, { type: "bus_snapshot" }> => e.type === "bus_snapshot",
+      );
+
+      // Sub-pipeline snapshots should have qualified names
+      const subSnaps = snapshots.filter((s) => s.afterAgent.startsWith("parent/"));
+      expect(subSnaps.length).toBeGreaterThanOrEqual(2);
+      expect(subSnaps.some((s) => s.afterAgent === "parent/child-a")).toBe(true);
+      expect(subSnaps.some((s) => s.afterAgent === "parent/child-b")).toBe(true);
+
+      // child-b snapshot should contain child-a in its manifests
+      const childBSnap = subSnaps.find((s) => s.afterAgent === "parent/child-b");
+      expect(childBSnap!.manifests.map((m) => m.agent)).toContain("child-a");
+    });
+
+    it("does not emit bus_snapshot when onProgress is absent", async () => {
+      mockRunAgent.mockImplementation(async (def: AgentDefinition) => manifest(def.name));
+
+      // Should not throw
+      const orch = new Orchestrator({
+        agents: [agent("a"), agent("b", ["a"])],
+        model: TEST_MODEL,
+      });
+      await expect(orch.run("Task")).resolves.toBeDefined();
+    });
+  });
+
   // ── Graph errors bubble up ───────────────────────────────
 
   it("throws on cyclic dependencies", async () => {

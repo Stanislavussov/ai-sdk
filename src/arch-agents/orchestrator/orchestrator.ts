@@ -77,6 +77,17 @@ export class Orchestrator {
 
             bus.set(manifest);
             this.config.onProgress?.({ type: "agent_done", agent: qualifiedName, manifest });
+
+            // Log bus snapshot after every agent so consumers can verify
+            // that all upstream context accumulates correctly.
+            const snap = bus.snapshot();
+            this.config.onProgress?.({
+              type: "bus_snapshot",
+              afterAgent: qualifiedName,
+              manifests: snap.manifests,
+              contextForNext: snap.contextForNext,
+            });
+
             return manifest;
           } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));

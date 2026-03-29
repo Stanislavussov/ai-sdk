@@ -149,6 +149,55 @@ describe("ManifestBus", () => {
     });
   });
 
+  // ── snapshot ──────────────────────────────────────────────
+
+  describe("snapshot", () => {
+    it("returns empty snapshot when bus has no manifests", () => {
+      const bus = new ManifestBus();
+      const snap = bus.snapshot();
+      expect(snap.manifests).toEqual([]);
+      expect(snap.contextForNext).toBe("You run first — no upstream context.");
+    });
+
+    it("returns all manifests and full context after storing", () => {
+      const bus = new ManifestBus();
+      bus.set(manifest("researcher", { summary: "Found evidence for X" }));
+      bus.set(manifest("product-owner", { summary: "Prioritized feature Y" }));
+
+      const snap = bus.snapshot();
+      expect(snap.manifests).toHaveLength(2);
+      expect(snap.manifests[0].agent).toBe("researcher");
+      expect(snap.manifests[1].agent).toBe("product-owner");
+      expect(snap.contextForNext).toContain("[researcher]");
+      expect(snap.contextForNext).toContain("Found evidence for X");
+      expect(snap.contextForNext).toContain("[product-owner]");
+      expect(snap.contextForNext).toContain("Prioritized feature Y");
+    });
+
+    it("snapshot grows as more manifests are added", () => {
+      const bus = new ManifestBus();
+
+      bus.set(manifest("a", { summary: "A output" }));
+      const snap1 = bus.snapshot();
+      expect(snap1.manifests).toHaveLength(1);
+      expect(snap1.contextForNext).toContain("[a]");
+      expect(snap1.contextForNext).not.toContain("[b]");
+
+      bus.set(manifest("b", { summary: "B output" }));
+      const snap2 = bus.snapshot();
+      expect(snap2.manifests).toHaveLength(2);
+      expect(snap2.contextForNext).toContain("[a]");
+      expect(snap2.contextForNext).toContain("[b]");
+
+      bus.set(manifest("c", { summary: "C output" }));
+      const snap3 = bus.snapshot();
+      expect(snap3.manifests).toHaveLength(3);
+      expect(snap3.contextForNext).toContain("[a]");
+      expect(snap3.contextForNext).toContain("[b]");
+      expect(snap3.contextForNext).toContain("[c]");
+    });
+  });
+
   // ── getFullContext ───────────────────────────────────────
 
   describe("getFullContext", () => {

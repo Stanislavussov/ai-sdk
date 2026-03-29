@@ -53,6 +53,18 @@ export class ManifestBus {
     return this.getContext(Array.from(this.store.keys()));
   }
 
+  /**
+   * Returns a snapshot of the current bus state for logging/debugging.
+   * Includes all stored manifests and the full context string that
+   * the next agent would receive.
+   */
+  snapshot(): { manifests: AgentManifest[]; contextForNext: string } {
+    return {
+      manifests: this.all(),
+      contextForNext: this.getFullContext(),
+    };
+  }
+
   all(): AgentManifest[] {
     return Array.from(this.store.values());
   }

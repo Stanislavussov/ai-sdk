@@ -80,4 +80,18 @@ export type ProgressEvent =
       type: "agent_activity";
       agent: string;
       message: string;
+    }
+  | {
+      /**
+       * Emitted after every agent completes, showing the full accumulated
+       * state of the ManifestBus. Useful for debugging context propagation
+       * and verifying that all upstream knowledge is available.
+       */
+      type: "bus_snapshot";
+      /** The agent that just finished and triggered this snapshot */
+      afterAgent: string;
+      /** All manifests currently in the bus (in insertion order) */
+      manifests: AgentManifest[];
+      /** The full context string that the NEXT agent would receive */
+      contextForNext: string;
     };
