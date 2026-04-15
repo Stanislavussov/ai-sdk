@@ -31,6 +31,7 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 
 export const KNOWN_MODELS = [
   // Anthropic
+  "anthropic/claude-sonnet-4-7",
   "anthropic/claude-sonnet-4-6",
   "anthropic/claude-sonnet-4-5",
   "anthropic/claude-sonnet-4-5-20250929",
@@ -119,6 +120,19 @@ export const KNOWN_MODELS = [
   "groq/llama-3.1-8b-instant",
   "groq/deepseek-r1-distill-llama-70b",
   "groq/gemma2-9b-it",
+
+  // GitHub Copilot
+  "github-copilot/gpt-5.4",
+  "github-copilot/gpt-5.4-pro",
+  "github-copilot/gpt-5",
+  "github-copilot/gpt-4o",
+  "github-copilot/gpt-4-turbo",
+  "github-copilot/gpt-4",
+  "github-copilot/claude-sonnet-4",
+  "github-copilot/claude-sonnet-4.5",
+  "github-copilot/claude-opus-4.5",
+  "github-copilot/claude-opus-4.6",
+  "github-copilot/claude-haiku-4.5",
 ] as const;
 
 export type KnownModelId = (typeof KNOWN_MODELS)[number];
