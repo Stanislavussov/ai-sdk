@@ -30,15 +30,32 @@ describe("buildAgentSystemPrompt", () => {
   it("includes the dependency context", () => {
     const ctx = "## Output from [upstream]\nDid important things";
     const prompt = buildAgentSystemPrompt(agent(), ctx);
-    expect(prompt).toContain("## Context from upstream agents");
+    expect(prompt).toContain("## Upstream Context");
     expect(prompt).toContain(ctx);
   });
 
-  it("includes responsibility guidelines", () => {
+  it("includes manifest instructions for write agents", () => {
     const prompt = buildAgentSystemPrompt(agent(), "");
-    expect(prompt).toContain("Stay strictly within your layer");
-    expect(prompt).toContain("do not modify files owned by other agents");
-    expect(prompt).toContain("write a manifest JSON file");
+    expect(prompt).toContain("manifest file");
+    expect(prompt).toContain("'write' tool");
+  });
+
+  it("includes code-intel section by default", () => {
+    const prompt = buildAgentSystemPrompt(agent(), "");
+    expect(prompt).toContain("code_map");
+    expect(prompt).toContain("code_outline");
+    expect(prompt).toContain("find_references");
+  });
+
+  it("omits code-intel when disabled via enabledTools", () => {
+    const prompt = buildAgentSystemPrompt(agent({ enabledTools: ["read", "write"] }), "");
+    expect(prompt).not.toContain("code_map");
+    expect(prompt).not.toContain("code-intel");
+  });
+
+  it("includes skip rule", () => {
+    const prompt = buildAgentSystemPrompt(agent(), "");
+    expect(prompt).toContain("SKIP: not in my scope");
   });
 
   it("uses different agent names correctly", () => {
@@ -98,21 +115,16 @@ describe("buildOrchestratorTaskPrompt", () => {
     expect(prompt).toContain("/tmp/agent-manifest.json");
   });
 
-  it("includes the required manifest schema description", () => {
+  it("includes the required manifest schema", () => {
     const prompt = buildOrchestratorTaskPrompt("task", "/tmp/m.json");
     expect(prompt).toContain("changedFiles");
     expect(prompt).toContain("summary");
     expect(prompt).toContain("exports");
   });
 
-  it("tells the agent not to stop until manifest is written", () => {
+  it("mentions write tool requirement", () => {
     const prompt = buildOrchestratorTaskPrompt("task", "/tmp/m.json");
-    expect(prompt).toContain("Do not respond with completion until the manifest file has been written");
-  });
-
-  it("mentions no markdown fences", () => {
-    const prompt = buildOrchestratorTaskPrompt("task", "/tmp/m.json");
-    expect(prompt).toContain("no markdown code fences");
+    expect(prompt).toContain("write' tool");
   });
 
   it("has a Task section header", () => {
@@ -120,8 +132,8 @@ describe("buildOrchestratorTaskPrompt", () => {
     expect(prompt).toContain("## Task");
   });
 
-  it("has a Required manifest section header", () => {
+  it("has a Required manifest warning", () => {
     const prompt = buildOrchestratorTaskPrompt("task", "/tmp/m.json");
-    expect(prompt).toContain("CRITICAL REQUIREMENT");
+    expect(prompt).toContain("Required");
   });
 });

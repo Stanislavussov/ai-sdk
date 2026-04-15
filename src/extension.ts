@@ -29,7 +29,7 @@ function buildAgentDefinitionSchema(): TObject {
     ),
     enabledTools: Type.Optional(
       Type.Array(Type.String(), {
-        description: "Cherry-pick specific tools: read, bash, edit, write, grep, find, ls. Overrides type.",
+        description: "Cherry-pick specific tools: read, bash, edit, write, grep, find, ls, code-intel. Overrides type.",
       }),
     ),
     skills: Type.Optional(
@@ -396,7 +396,7 @@ export default function (pi: ExtensionAPI) {
       ),
       enabledTools: Type.Optional(
         Type.Array(Type.String(), {
-          description: "Cherry-pick tools: read, bash, edit, write, grep, find, ls",
+          description: "Cherry-pick tools: read, bash, edit, write, grep, find, ls, code-intel",
         }),
       ),
       skills: Type.Optional(

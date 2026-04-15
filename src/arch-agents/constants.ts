@@ -22,7 +22,7 @@ export type AgentType = (typeof AGENT_TYPES)[number];
 // ── Tool names ─────────────────────────────────────────────
 
 export const TOOL_NAMES = [
-  "read", "bash", "edit", "write", "grep", "find", "ls",
+  "read", "bash", "edit", "write", "grep", "find", "ls", "code-intel",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];

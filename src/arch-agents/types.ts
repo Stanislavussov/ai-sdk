@@ -17,7 +17,7 @@ export interface AgentDefinition {
   /**
    * Specific built-in tools to enable.
    * Overrides `type` when provided.
-   * Valid names: "read", "bash", "edit", "write", "grep", "find", "ls"
+   * Valid names: "read", "bash", "edit", "write", "grep", "find", "ls", "code-intel"
    */
   enabledTools?: string[];
   tools?: AgentTool<any>[];
