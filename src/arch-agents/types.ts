@@ -1,4 +1,5 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import type { AgentType, ModelId, ThinkingLevel } from "./constants.js";
 
 export type { AgentType, ModelId, ThinkingLevel } from "./constants.js";
@@ -63,6 +64,21 @@ export interface OrchestratorConfig {
   thinkingLevel?: ThinkingLevel;
   onProgress?: (event: ProgressEvent) => void;
   manifestDir?: string;
+  /**
+   * Model registry to use. If provided, the same registry is shared across
+   * all agent runs. If not provided, each agent creates its own registry.
+   *
+   * Use this to ensure dynamic providers (e.g. from extensions) are available
+   * to all agents.
+   */
+  modelRegistry?: ModelRegistry;
+  /**
+   * Auth storage to use. If modelRegistry is provided, this should be the
+   * same authStorage that was used to create it (or one that can access the
+   * same credentials).
+   * If not provided and modelRegistry is not provided, creates a new one.
+   */
+  authStorage?: AuthStorage;
 }
 
 export type ProgressEvent =

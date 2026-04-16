@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import {
   Type,
   type TObject,
@@ -336,6 +337,7 @@ export default function (pi: ExtensionAPI) {
         cwd: ctx.cwd,
         manifestDir: projectConfig?.manifestDir,
         onProgress,
+        modelRegistry: ctx.modelRegistry,
       };
 
       const app = createOrchestrator(config);

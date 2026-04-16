@@ -223,8 +223,8 @@ export async function runAgent(
 
   log.debug("AGENT", `Manifest file path: ${manifestPath}`);
 
-  const authStorage = AuthStorage.create();
-  const modelRegistry = new ModelRegistry(authStorage);
+  const authStorage = config.authStorage ?? AuthStorage.create();
+  const modelRegistry = config.modelRegistry ?? new ModelRegistry(authStorage);
   const model = resolveModel(def.model ?? config.model, modelRegistry);
 
   log.debug("AGENT", `Model resolved: ${def.model ?? config.model}`);
