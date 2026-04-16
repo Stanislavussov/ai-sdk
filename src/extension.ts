@@ -1,10 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Type, type TObject, type TOptional, type TArray } from "@sinclair/typebox";
+import {
+  Type,
+  type TObject,
+  type TOptional,
+  type TArray,
+} from "@sinclair/typebox";
+import { registerAskUserTool } from "./ask-user.js";
 import { createOrchestrator } from "./arch-agents/index.js";
 import { runAgent } from "./arch-agents/agent/agent-factory.js";
-import type { AgentDefinition, AgentManifest, AgentType, OrchestratorConfig, ProgressEvent } from "./arch-agents/types.js";
+import type {
+  AgentDefinition,
+  AgentManifest,
+  AgentType,
+  OrchestratorConfig,
+  ProgressEvent,
+} from "./arch-agents/types.js";
 import { registerCodeIntelTools } from "./code-intel/index.js";
 import { initLogger, log } from "./arch-agents/logger.js";
 
@@ -18,9 +30,13 @@ function buildAgentDefinitionSchema(): TObject {
     role: Type.String({ description: "What this agent is responsible for" }),
     rules: Type.String({ description: "Constraints and style rules" }),
     dependsOn: Type.Optional(
-      Type.Array(Type.String(), { description: "Agent names this agent depends on (sibling sub-agents)" }),
+      Type.Array(Type.String(), {
+        description: "Agent names this agent depends on (sibling sub-agents)",
+      }),
     ),
-    model: Type.Optional(Type.String({ description: "Model override for this agent" })),
+    model: Type.Optional(
+      Type.String({ description: "Model override for this agent" }),
+    ),
     type: Type.Optional(
       Type.String({
         description:
@@ -29,7 +45,8 @@ function buildAgentDefinitionSchema(): TObject {
     ),
     enabledTools: Type.Optional(
       Type.Array(Type.String(), {
-        description: "Cherry-pick specific tools: read, bash, edit, write, grep, find, ls, code-intel. Overrides type.",
+        description:
+          "Cherry-pick specific tools: read, bash, edit, write, grep, find, ls, code-intel. Overrides type.",
       }),
     ),
     skills: Type.Optional(
@@ -37,7 +54,8 @@ function buildAgentDefinitionSchema(): TObject {
     ),
     standalone: Type.Optional(
       Type.Boolean({
-        description: "When true, exclude this agent from the orchestration pipeline.",
+        description:
+          "When true, exclude this agent from the orchestration pipeline.",
       }),
     ),
   };
@@ -104,10 +122,13 @@ function loadConfig(cwd: string): OrchestratorFileConfig | null {
     try {
       const raw = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
       if (raw.orchestrator && Array.isArray(raw.orchestrator.agents)) {
-        if (!raw.orchestrator.model || typeof raw.orchestrator.model !== "string") {
+        if (
+          !raw.orchestrator.model ||
+          typeof raw.orchestrator.model !== "string"
+        ) {
           throw new Error(
-            'orchestrator.model is required in .pi/settings.json. ' +
-            'Specify a default model, e.g. "anthropic/claude-sonnet-4-5".',
+            "orchestrator.model is required in .pi/settings.json. " +
+              'Specify a default model, e.g. "anthropic/claude-sonnet-4-5".',
           );
         }
         return raw.orchestrator as OrchestratorFileConfig;
@@ -243,14 +264,14 @@ export default function (pi: ExtensionAPI) {
     label: "Orchestrate",
     description:
       "Run the project's multi-agent orchestration pipeline. " +
-      "Agents are defined in .pi/settings.json under the \"orchestrator\" key. " +
+      'Agents are defined in .pi/settings.json under the "orchestrator" key. ' +
       "You only need to provide the task. " +
       "If no config exists, you must supply agents inline.",
     promptSnippet:
       "Run multi-agent orchestration pipeline defined in .pi/settings.json",
     promptGuidelines: [
       "Use the orchestrate tool when the user asks to run the agent pipeline, " +
-      "generate code across layers, or any task that requires coordinated multi-agent work.",
+        "generate code across layers, or any task that requires coordinated multi-agent work.",
       "If .pi/settings.json has an orchestrator config, just provide a task — agents are pre-configured.",
       "If no config exists, provide agents inline with name, role, rules, and optional dependsOn.",
     ],
@@ -281,13 +302,14 @@ export default function (pi: ExtensionAPI) {
       });
 
       const agents: AgentDefinition[] | undefined =
-        (params.agents as AgentDefinition[] | undefined) ?? projectConfig?.agents;
+        (params.agents as AgentDefinition[] | undefined) ??
+        projectConfig?.agents;
 
       if (!agents || agents.length === 0) {
         log.error("EXT", "No agents defined — aborting");
         throw new Error(
-          "No agents defined. Add an \"orchestrator\" section to .pi/settings.json " +
-          "or pass agents inline. See the ai-sdk README for the config schema.",
+          'No agents defined. Add an "orchestrator" section to .pi/settings.json ' +
+            "or pass agents inline. See the ai-sdk README for the config schema.",
         );
       }
 
@@ -295,8 +317,8 @@ export default function (pi: ExtensionAPI) {
       if (!model) {
         log.error("EXT", "No model specified — aborting");
         throw new Error(
-          "No model specified. Set \"model\" in the orchestrator config in .pi/settings.json " +
-          "or pass it as a parameter. Example: \"anthropic/claude-sonnet-4-5\".",
+          'No model specified. Set "model" in the orchestrator config in .pi/settings.json ' +
+            'or pass it as a parameter. Example: "anthropic/claude-sonnet-4-5".',
         );
       }
 
@@ -319,10 +341,14 @@ export default function (pi: ExtensionAPI) {
       const app = createOrchestrator(config);
       const manifests = await app.run(params.task);
 
-      log.info("EXT", `═══ orchestration complete — ${manifests.length} manifests ═══`, {
-        agents: manifests.map((m) => m.agent),
-        totalChangedFiles: manifests.flatMap((m) => m.changedFiles).length,
-      });
+      log.info(
+        "EXT",
+        `═══ orchestration complete — ${manifests.length} manifests ═══`,
+        {
+          agents: manifests.map((m) => m.agent),
+          totalChangedFiles: manifests.flatMap((m) => m.changedFiles).length,
+        },
+      );
 
       return {
         content: [
@@ -396,7 +422,8 @@ export default function (pi: ExtensionAPI) {
       ),
       enabledTools: Type.Optional(
         Type.Array(Type.String(), {
-          description: "Cherry-pick tools: read, bash, edit, write, grep, find, ls, code-intel",
+          description:
+            "Cherry-pick tools: read, bash, edit, write, grep, find, ls, code-intel",
         }),
       ),
       skills: Type.Optional(
@@ -423,7 +450,10 @@ export default function (pi: ExtensionAPI) {
       });
 
       // Resolve agent definition: config lookup + inline overrides (recursive search)
-      const configAgent = findAgentByName(projectConfig?.agents ?? [], params.name);
+      const configAgent = findAgentByName(
+        projectConfig?.agents ?? [],
+        params.name,
+      );
 
       if (configAgent) {
         log.debug("EXT", `Found agent "${params.name}" in config`, {
@@ -433,15 +463,22 @@ export default function (pi: ExtensionAPI) {
           dependsOn: configAgent.dependsOn ?? [],
         });
       } else {
-        log.debug("EXT", `Agent "${params.name}" not found in config — using inline definition`);
+        log.debug(
+          "EXT",
+          `Agent "${params.name}" not found in config — using inline definition`,
+        );
       }
 
       if (!configAgent && !params.role) {
-        const available = collectAgentNames(projectConfig?.agents ?? []).join(", ") || "(none)";
-        log.error("EXT", `Agent "${params.name}" not found and no inline role provided`);
+        const available =
+          collectAgentNames(projectConfig?.agents ?? []).join(", ") || "(none)";
+        log.error(
+          "EXT",
+          `Agent "${params.name}" not found and no inline role provided`,
+        );
         throw new Error(
           `Agent "${params.name}" not found in config. Available: ${available}. ` +
-          "Provide role + rules to define one inline.",
+            "Provide role + rules to define one inline.",
         );
       }
 
@@ -455,7 +492,9 @@ export default function (pi: ExtensionAPI) {
         enabledTools: params.enabledTools ?? configAgent?.enabledTools,
         skills: params.skills ?? configAgent?.skills,
         thinkingLevel: configAgent?.thinkingLevel,
-        subAgents: (params.subAgents ?? configAgent?.subAgents) as AgentDefinition[] | undefined,
+        subAgents: (params.subAgents ?? configAgent?.subAgents) as
+          | AgentDefinition[]
+          | undefined,
       };
 
       log.debug("EXT", `Resolved agent definition for "${agentDef.name}"`, {
@@ -474,14 +513,18 @@ export default function (pi: ExtensionAPI) {
       if (!model) {
         log.error("EXT", "No model specified for run_agent — aborting");
         throw new Error(
-          "No model specified. Set \"model\" in the orchestrator config in .pi/settings.json, " +
-          "on the agent definition, or pass it as a parameter. Example: \"anthropic/claude-sonnet-4-5\".",
+          'No model specified. Set "model" in the orchestrator config in .pi/settings.json, ' +
+            'on the agent definition, or pass it as a parameter. Example: "anthropic/claude-sonnet-4-5".',
         );
       }
 
       const isComposite = agentDef.subAgents && agentDef.subAgents.length > 0;
 
-      log.info("EXT", `Running ${isComposite ? "composite" : "leaf"} agent "${agentDef.name}"`, { model });
+      log.info(
+        "EXT",
+        `Running ${isComposite ? "composite" : "leaf"} agent "${agentDef.name}"`,
+        { model },
+      );
 
       onUpdate?.({
         content: [
@@ -508,14 +551,25 @@ export default function (pi: ExtensionAPI) {
 
       let manifest: AgentManifest;
       if (isComposite) {
-        log.debug("EXT", `Dispatching composite agent "${agentDef.name}" to orchestrator`);
+        log.debug(
+          "EXT",
+          `Dispatching composite agent "${agentDef.name}" to orchestrator`,
+        );
         // Use orchestrator for composite agents so sub-agents are executed
         const app = createOrchestrator(agentConfig);
         const manifests = await app.run(params.task, dependencyContext);
         manifest = manifests[0];
       } else {
-        log.debug("EXT", `Dispatching leaf agent "${agentDef.name}" to runAgent`);
-        manifest = await runAgent(agentDef, params.task, dependencyContext, agentConfig);
+        log.debug(
+          "EXT",
+          `Dispatching leaf agent "${agentDef.name}" to runAgent`,
+        );
+        manifest = await runAgent(
+          agentDef,
+          params.task,
+          dependencyContext,
+          agentConfig,
+        );
       }
 
       log.info("EXT", `═══ run_agent complete: "${manifest.agent}" ═══`, {
@@ -554,7 +608,7 @@ export default function (pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       if (!projectConfig) {
         ctx.ui.notify(
-          "No orchestrator config in .pi/settings.json. Add an \"orchestrator\" key — see ai-sdk README.",
+          'No orchestrator config in .pi/settings.json. Add an "orchestrator" key — see ai-sdk README.',
           "error",
         );
         return;
@@ -598,7 +652,7 @@ export default function (pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       if (!projectConfig) {
         ctx.ui.notify(
-          "No orchestrator config in .pi/settings.json. Add an \"orchestrator\" key — see ai-sdk README.",
+          'No orchestrator config in .pi/settings.json. Add an "orchestrator" key — see ai-sdk README.',
           "error",
         );
         return;
@@ -638,11 +692,12 @@ export default function (pi: ExtensionAPI) {
   // ── Command: /orch-agents ──
 
   pi.registerCommand("orch-agents", {
-    description: "List all configured orchestrator agents from .pi/settings.json",
+    description:
+      "List all configured orchestrator agents from .pi/settings.json",
     handler: async (_args, ctx) => {
       if (!projectConfig) {
         ctx.ui.notify(
-          "No orchestrator config in .pi/settings.json. Add an \"orchestrator\" key — see ai-sdk README.",
+          'No orchestrator config in .pi/settings.json. Add an "orchestrator" key — see ai-sdk README.',
           "error",
         );
         return;
@@ -662,11 +717,17 @@ export default function (pi: ExtensionAPI) {
           : "no dependencies";
         const model = a.model ?? defaultModel;
         const type = a.type ?? "coding";
-        const subLabel = a.subAgents?.length ? ` [composite: ${a.subAgents.length} sub-agent(s)]` : "";
-        const result = [`${indent}${bullet} ${a.name} (${type}, ${model}) — ${a.role} [${deps}]${subLabel}`];
+        const subLabel = a.subAgents?.length
+          ? ` [composite: ${a.subAgents.length} sub-agent(s)]`
+          : "";
+        const result = [
+          `${indent}${bullet} ${a.name} (${type}, ${model}) — ${a.role} [${deps}]${subLabel}`,
+        ];
         if (a.subAgents) {
           for (const sub of a.subAgents) {
-            result.push(...formatAgent(sub, indent + "  ", "↳", a.model ?? defaultModel));
+            result.push(
+              ...formatAgent(sub, indent + "  ", "↳", a.model ?? defaultModel),
+            );
           }
         }
         return result;
@@ -702,4 +763,7 @@ export default function (pi: ExtensionAPI) {
 
   // ── Code intelligence tools ──
   registerCodeIntelTools(pi);
+
+  // ── ask_user: interactive question/answer tool ──
+  registerAskUserTool(pi);
 }
