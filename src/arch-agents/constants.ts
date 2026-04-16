@@ -115,6 +115,17 @@ export const KNOWN_MODELS = [
   "mistral/codestral-latest",
   "mistral/magistral-medium-latest",
 
+  // MiniMax
+  "minimax/minimax-01",
+  "minimax/minimax-01-mini",
+  "minimax/minimax-text-01",
+  "minimax/minimax-text-01-mini",
+  "minimax/minimax-chat",
+  "minimax/minimax-chat-pro",
+  "minimax/minimax-chat-flash",
+  "minimax/minimax-m2.7",
+  "minimax/minimax-m2",
+
   // Groq
   "groq/llama-3.3-70b-versatile",
   "groq/llama-3.1-8b-instant",
