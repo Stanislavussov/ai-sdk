@@ -14,6 +14,7 @@ import {
   createReadTool,
   createWriteTool,
   DefaultResourceLoader,
+  getAgentDir,
   ModelRegistry,
   SessionManager,
   type Skill,
@@ -224,7 +225,7 @@ export async function runAgent(
   log.debug("AGENT", `Manifest file path: ${manifestPath}`);
 
   const authStorage = config.authStorage ?? AuthStorage.create();
-  const modelRegistry = config.modelRegistry ?? new ModelRegistry(authStorage);
+  const modelRegistry = config.modelRegistry ?? ModelRegistry.create(authStorage);
   const model = resolveModel(def.model ?? config.model, modelRegistry);
 
   log.debug("AGENT", `Model resolved: ${def.model ?? config.model}`);
@@ -241,6 +242,7 @@ export async function runAgent(
 
   const loader = new DefaultResourceLoader({
     cwd,
+    agentDir: getAgentDir(),
     systemPromptOverride: () => systemPrompt,
     skillsOverride: (current) => ({
       skills: [...current.skills, ...agentSkills],
@@ -275,7 +277,7 @@ export async function runAgent(
     authStorage,
     modelRegistry,
     resourceLoader: loader,
-    tools: builtinTools,
+    tools: builtinTools.map((t) => t.name),
     customTools: (def.tools ?? []) as AgentTool<any>[],
   });
 

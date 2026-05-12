@@ -124,6 +124,8 @@ export const KNOWN_MODELS = [
   "minimax/minimax-chat-pro",
   "minimax/minimax-chat-flash",
   "minimax/minimax-m2.7",
+  "minimax/MiniMax-M2.7",
+  "minimax/MiniMax-M2",
   "minimax/minimax-m2",
 
   // Groq
